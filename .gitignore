@@ -1,0 +1,29 @@
+node_modules/
+dist-main/
+dist-renderer/
+release/
+*.log
+.env
+.DS_Store
+
+# Local build/test/dev clutter that has never belonged in the repo — this
+# working directory is also where local packaging, QA runs, and npm caches
+# land, none of which are project source.
+tmp/
+.tmp/
+.npm-cache/
+qa/
+qa-*/
+Microsoft/
+public/
+
+# The extracted source of a real third-party commercial application, kept
+# locally for a clean-room "gap audit" comparison. Must never be committed —
+# this is not Axiom's code and its presence in this repo's history would
+# undermine the clean-room process it exists to support. See CLEAN_ROOM.md.
+audit/
+
+# electron-builder leaves randomly-named temp extraction directories in the
+# project root during packaging; matched by their consistent length/shape
+# rather than enumerated, since new ones appear with new random names.
+/[^ -~]*/

@@ -1,0 +1,26 @@
+/*
+ * Final typography contract. Earlier HUD styles intentionally used decorative
+ * microtype; this layer keeps the visual language while making operational
+ * information readable on normal desktop and laptop displays.
+ */
+.diag-title span,.diag-title small{font-size:10px;line-height:1.4}.diag-title b{font-size:15px}.diag-title button{font-size:10px}.diag-overview span{font-size:10px}.diag-overview small{font-size:9px;line-height:1.35;white-space:normal}.diag-overview b{font-size:18px}.diag-overview article{min-height:92px}.diag-card>header{height:40px}.diag-card>header span,.diag-card>header em{font-size:9px}.diag-card>header b{font-size:11px}.diag-spec-row span{font-size:9px}.diag-spec-row b{font-size:10px}.diag-list b{font-size:12px}.diag-list small{font-size:10px;line-height:1.4}.diag-list dt{font-size:9px}.diag-list dd{font-size:11px}.disk-line strong{font-size:11px}.io-row span,.battery-grid span{font-size:9px}.io-row b,.battery-grid b{font-size:11px}.network-primary>b{font-size:13px}.network-primary>small{font-size:10px}.process-columns>div>b{font-size:10px}.process-columns p{font-size:10px}.diag-empty,.diag-footer{font-size:10px}
+
+.probe-grid b{font-size:12px;white-space:normal}.probe-grid span{font-size:10px;line-height:1.4;white-space:normal}.probe-grid small{font-size:9px;line-height:1.4;white-space:normal}.probe-grid em{font-size:9px}.probe-grid article{padding:11px}.truth-routes span,.truth-routes em{font-size:8px}.truth-routes b{font-size:10px}.truth-latency span,.operational-truth>footer>span,.operational-truth>footer button{font-size:8px}.truth-orbit>span{font-size:8px}
+
+.memory-entry select{font-size:11px}.memory-metrics span,.memory-metrics small{font-size:10px}.memory-kind b{font-size:11px}.memory-kind span{font-size:9px}.memory-copy p{font-size:14px}.memory-copy span,.memory-copy small{font-size:10px;line-height:1.4;white-space:normal}.memory-controls button{font-size:10px}.memory-controls em{font-size:9px}
+
+.world-head span,.world-topology>header span,.observation-stream>header span{font-size:10px}.world-head p{font-size:13px}.world-head button{font-size:11px}.world-metrics span{font-size:9px}.world-topology>header em,.observation-stream>header em{font-size:9px}.app-node p b,.window-node p b{font-size:12px}.app-node p span,.window-node p span{font-size:9px}.app-node em,.window-node em{font-size:9px}.observation-stream article p b{font-size:10px}.observation-stream article p span{font-size:11px}.observation-stream article time,.observation-stream footer{font-size:9px}.world-empty b{font-size:11px}.world-empty span{font-size:11px}
+
+.mission-status span,.mission-status small{font-size:10px}.mission-card>header span,.mission-card>header em{font-size:9px}.mission-card>header b{font-size:12px}.mission-card input,.mission-card textarea,.mission-card select{font-size:13px}.mission-card button{font-size:10px}.mission-list p b{font-size:13px}.mission-list p span{font-size:10px}.mission-list p small{font-size:11px}.mission-empty,.agent-form label,.mission-notice,.connector-message{font-size:11px}.connector-intro span{font-size:10px}.connector-intro b{font-size:14px}.connector-intro p{font-size:13px}.connector-card header b{font-size:13px}.connector-card header span,.connector-card header em{font-size:10px}.connector-card>p{font-size:12px}.connector-card label,.connector-card input{font-size:11px}.connector-actions button,.connector-error,.connector-scopes{font-size:10px}.intel-deck>header span{font-size:10px}.intel-deck>header b{font-size:15px}.intel-deck>header p{font-size:13px}.intel-feeds button b{font-size:12px}.intel-feeds button small{font-size:10px}.intel-deck>form input{font-size:14px}.intel-deck>form button,.intel-last header{font-size:10px}.intel-last p{font-size:13px}
+
+@media(max-width:1180px){.diag-overview article{min-height:82px}.diag-overview span{font-size:9px}.diag-overview small{font-size:8px}.probe-grid{grid-template-columns:1fr}}
+
+/* Each live conversation indicator owns a distinct vertical lane. */
+.voice-identity-pill{bottom:210px}
+.identity-line{bottom:145px}
+.composer{bottom:58px}
+.error-strip{left:50%;top:18px;bottom:auto;transform:translateX(-50%);padding:8px 12px;border:1px solid rgba(255,70,93,.26);background:rgba(15,2,7,.92);z-index:12}
+
+/* The source plate contains both skull and stationary ring. Retain the entire
+   cranium while ending the moving-head mask below the separate ring band. */
+.modded-head img{clip-path:polygon(50% 9.4%,44% 9.8%,38% 11.4%,33% 14.7%,28.5% 20.5%,25.2% 31%,23.2% 47%,26% 55%,30% 60%,32% 69%,34.5% 77%,38.5% 84%,44.5% 87.8%,50% 88.8%,55.5% 87.8%,61.5% 84%,65.5% 77%,68% 69%,70% 60%,74% 55%,76.8% 47%,74.8% 31%,71.5% 20.5%,67% 14.7%,62% 11.4%,56% 9.8%)}

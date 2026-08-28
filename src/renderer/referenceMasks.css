@@ -1,0 +1,1 @@
+.stage:after{content:"";position:absolute;left:3%;right:1%;bottom:0;height:190px;z-index:4;pointer-events:none;background:linear-gradient(to bottom,transparent 0,rgba(0,9,9,.96) 20%,#010909 42%,#010808 100%)}

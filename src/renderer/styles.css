@@ -1,0 +1,319 @@
+:root{font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;color:#d8f4f5;background:#03070c;font-synthesis:none;--signal:70,232,255;--signal-solid:#46e8ff;--muted:#6c8e95;--panel:rgba(4,15,21,.72);--line:rgba(86,214,222,.16)}
+*{box-sizing:border-box}html,body,#root{width:100%;height:100%;margin:0;overflow:hidden}button,input{font:inherit}.shell{width:100%;height:100%;display:grid;grid-template:72px 1fr / 216px minmax(560px,1fr) 310px;background:radial-gradient(circle at 53% 45%,rgba(var(--signal),.08),transparent 34%),linear-gradient(120deg,#02060a,#051017 50%,#02070b);transition:--signal .4s;position:relative}.shell:before{content:"";position:absolute;inset:72px 0 0 216px;pointer-events:none;background-image:linear-gradient(rgba(var(--signal),.035) 1px,transparent 1px),linear-gradient(90deg,rgba(var(--signal),.035) 1px,transparent 1px);background-size:42px 42px;mask-image:radial-gradient(circle at 45% 45%,black,transparent 75%)}.mode-listening{--signal:87,255,180;--signal-solid:#57ffb4}.mode-thinking{--signal:169,120,255;--signal-solid:#a978ff}.mode-speaking{--signal:58,255,225;--signal-solid:#3affe1}.mode-success{--signal:116,255,132;--signal-solid:#74ff84}.mode-warning{--signal:255,193,79;--signal-solid:#ffc14f}.mode-error{--signal:255,74,110;--signal-solid:#ff4a6e}
+.topbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:rgba(2,7,11,.86);z-index:3}.brand{display:flex;align-items:center;gap:12px}.brand-mark{width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(var(--signal),.65);clip-path:polygon(50% 0,100% 25%,88% 88%,50% 100%,12% 88%,0 25%);font:500 16px "Cascadia Mono",Consolas,monospace;color:var(--signal-solid);filter:drop-shadow(0 0 12px rgba(var(--signal),.38))}.brand strong{font-size:16px;letter-spacing:.22em}.brand small{display:block;color:var(--muted);font:300 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.15em;margin-top:3px}.top-state{margin-left:auto;margin-right:24px;font:400 11px "Cascadia Mono",Consolas,monospace;letter-spacing:.2em;color:var(--signal-solid)}.top-state i,.rail-footer i,.provider i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#5d7378;margin-right:8px}.top-state i,.online{background:var(--signal-solid)!important;box-shadow:0 0 12px rgba(var(--signal),.9)}.icon-button{width:34px;height:34px;border:1px solid var(--line);background:transparent;color:var(--signal-solid);font-size:22px;cursor:pointer}
+.rail{grid-row:2;display:flex;flex-direction:column;padding:28px 14px 18px;border-right:1px solid var(--line);background:rgba(2,9,13,.62);z-index:2}.rail-index{font:300 9px "Cascadia Mono",Consolas,monospace;color:#4e7077;letter-spacing:.24em;padding:0 12px 20px}.rail button{height:62px;border:0;border-left:1px solid transparent;background:transparent;color:#78969c;text-align:left;padding:0 13px;font:400 10px "Cascadia Mono",Consolas,monospace;letter-spacing:.14em;cursor:pointer;transition:.2s}.rail button span{display:inline-block;width:34px;color:#3f6269}.rail button:hover,.rail button.active{color:#e5ffff;border-color:var(--signal-solid);background:linear-gradient(90deg,rgba(var(--signal),.12),transparent)}.rail button.active span{color:var(--signal-solid)}.rail-footer{margin-top:auto;border-top:1px solid var(--line);padding:20px 12px 4px;font:400 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.14em;color:#7d9ba0}
+/* Rail redesign — approved from a live mockup after several rounds
+   (Robbie: "lets try this" on the final "Living Core" version; "i only
+   use the settings really" drove collapsing the other 9 routes). Every
+   new interactive rule below is prefixed with .rail so it actually beats
+   the generic `.rail button{height:62px;...}` reset above — that rule
+   has specificity (0,1,1), so a bare `.primary-node{}` (0,1,0) would
+   silently lose to it for every overlapping property; `.rail
+   .primary-node{}` (0,2,0) wins correctly. */
+.rail-primary{padding:4px 12px 10px}
+.rail .primary-node{position:relative;display:flex;align-items:center;gap:12px;width:100%;height:52px;padding:0 12px;border:1px solid transparent;background:transparent;cursor:pointer;text-align:left;margin-bottom:6px;overflow:hidden;font:inherit;letter-spacing:normal;transition:all .25s ease}
+.rail .primary-node.active{border-color:rgba(var(--signal),.45);background:linear-gradient(90deg,rgba(var(--signal),.13),transparent)}
+.rail .primary-node.active:after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 20px rgba(var(--signal),.08);animation:primary-breathe 3.4s ease-in-out infinite}
+@keyframes primary-breathe{0%,100%{opacity:.5}50%{opacity:1}}
+.rail .primary-node:hover:not(.active){background:rgba(var(--signal),.04)}
+.rail .primary-node .p-icon{width:32px;height:32px;border-radius:8px;border:1px solid rgba(var(--signal),.32);display:grid;place-items:center;font-size:15px;font-style:normal;color:var(--signal-solid);flex:0 0 auto}
+.rail .primary-node.active .p-icon{background:rgba(var(--signal),.16);box-shadow:0 0 14px rgba(var(--signal),.3)}
+.rail .primary-node b{display:block;font:600 11.5px "Cascadia Mono",Consolas,monospace;letter-spacing:.07em;color:var(--ink,#d8f4f5)}
+.rail .primary-node>span>span{display:block;margin-top:2px;font:300 7.5px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em;color:#557478}
+.rail .more-toggle{display:flex;align-items:center;gap:10px;width:100%;height:auto;padding:9px 18px;border:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:transparent;color:#557478;cursor:pointer;text-align:left;font:inherit;letter-spacing:normal;user-select:none}
+.rail .more-toggle:hover{color:#89b3b7}
+.rail .more-toggle .mt-chevron{transition:transform .3s ease;font-size:10px;font-style:normal}
+.rail .more-toggle.open .mt-chevron{transform:rotate(90deg);color:var(--signal-solid)}
+.rail .more-toggle b{font:500 8.5px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em;flex:1;color:inherit}
+.rail .more-toggle>span{font:400 7.5px "Cascadia Mono",Consolas,monospace;color:#3e5c60}
+.more-list{border-bottom:1px solid var(--line);animation:more-list-in .25s ease-out}
+@keyframes more-list-in{from{opacity:0}to{opacity:1}}
+.rail .more-node{display:flex;align-items:center;gap:10px;width:100%;height:30px;padding:0 18px 0 22px;border:0;background:transparent;cursor:pointer;text-align:left;color:#557478;font:400 8.5px "Cascadia Mono",Consolas,monospace;letter-spacing:.06em}
+.rail .more-node:hover,.rail .more-node.active{color:#d8f4f5;background:rgba(var(--signal),.04)}
+.rail .more-node i{width:14px;text-align:center;font-size:9.5px;font-style:normal;opacity:.6;flex:0 0 auto}
+.quick-status{padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.qs-label{font:600 7px "Cascadia Mono",Consolas,monospace;letter-spacing:.2em;color:#4e7077}
+.rail .living-core{width:100%;border:1px solid var(--line);background:radial-gradient(circle at 50% 38%,rgba(var(--signal),.09),rgba(0,0,0,.3) 72%);padding:6px 6px 13px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:border-color .3s ease;height:auto;font:inherit;letter-spacing:normal;color:inherit}
+.rail .living-core:hover{border-color:rgba(var(--signal),.4)}
+.core-stack{position:relative;width:150px;height:150px;display:grid;place-items:center;perspective:600px}
+.core-stack canvas{position:absolute;inset:0}
+.core-3d{width:78px;height:78px;position:relative;transform-style:preserve-3d;animation:core-spin 11s linear infinite}
+.rail .living-core.on .core-3d{animation-duration:6s}
+@keyframes core-spin{to{transform:rotateY(360deg) rotateX(6deg)}}
+.core-ring-3d{position:absolute;inset:0;border-radius:50%;border:1.3px solid rgba(var(--signal),.65);box-shadow:0 0 16px rgba(var(--signal),.22);transition:box-shadow .4s ease;display:block}
+.rail .living-core.on .core-ring-3d{box-shadow:0 0 26px rgba(var(--signal),.5)}
+.core-ring-3d.r2{transform:rotateX(70deg);animation:ring-counter 7s linear infinite}
+.core-ring-3d.r3{transform:rotateX(70deg) rotateZ(60deg);animation:ring-counter 7s linear infinite}
+.core-ring-3d.r4{transform:rotateX(70deg) rotateZ(120deg);animation:ring-counter 7s linear infinite}
+@keyframes ring-counter{to{transform:rotateX(70deg) rotateZ(-300deg)}}
+.core-inner-glow{position:absolute;inset:26%;border-radius:50%;background:radial-gradient(circle,rgba(234,254,255,.5),transparent 70%);filter:blur(2px);transition:opacity .4s ease;opacity:.55;display:block}
+.rail .living-core.on .core-inner-glow{opacity:1}
+.core-3d-glyph{position:absolute;inset:0;display:grid;place-items:center;font-size:26px;color:transparent;-webkit-text-stroke:1px rgba(var(--signal),.9);filter:drop-shadow(0 0 8px rgba(var(--signal),.75))}
+.core-label{margin-top:11px;text-align:center}
+.core-label b{display:block;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em;color:#a8d0d3}
+.core-label>span{display:block;margin-top:2px;font:400 7.5px "Cascadia Mono",Consolas,monospace;color:var(--signal-solid);transition:color .3s ease}
+.rail .living-core:not(.on) .core-label>span{color:#4e7077}
+.rail .qs-camera{width:100%;display:flex;align-items:center;gap:11px;padding:9px;border:1px solid var(--line);background:rgba(0,0,0,.22);cursor:pointer;transition:border-color .2s ease;height:auto;font:inherit;letter-spacing:normal;color:inherit;text-align:left}
+.rail .qs-camera:hover{border-color:rgba(var(--signal),.35)}
+.qs-cam-thumb{width:38px;height:38px;border-radius:50%;flex:0 0 auto;position:relative;overflow:hidden;border:1px solid rgba(var(--signal),.3);background:repeating-linear-gradient(45deg,rgba(var(--signal),.06) 0 3px,transparent 3px 7px),#03080a}
+.qs-cam-thumb .rec{position:absolute;top:4px;left:4px;width:4px;height:4px;border-radius:50%;background:#ff4a6e;box-shadow:0 0 5px #ff4a6e;animation:blink 1.6s ease-in-out infinite;z-index:2;display:block}
+.qs-cam-thumb .cam-sweep{position:absolute;left:0;right:0;height:50%;top:-60%;background:linear-gradient(180deg,transparent,rgba(var(--signal),.5),transparent);animation:cam-sweep-move 3s ease-in-out infinite;display:block}
+@keyframes cam-sweep-move{0%{top:-60%}100%{top:110%}}
+@keyframes blink{50%{opacity:.25}}
+.qs-camera b{display:block;font:600 9.5px "Cascadia Mono",Consolas,monospace;letter-spacing:.06em;color:#a8d0d3}
+.qs-camera>span>span{display:block;margin-top:1px;font:300 7.5px "Cascadia Mono",Consolas,monospace;color:#4e7077}
+.qs-vitals{display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--line);background:rgba(0,0,0,.22)}
+.qs-vitals svg{flex:1;height:22px;overflow:visible}
+.qs-vline{fill:none;stroke:var(--signal-solid);stroke-width:1.3;filter:drop-shadow(0 0 3px rgba(var(--signal),.8))}
+.qs-vfill{opacity:.5}
+.qs-vitals b{font:500 9px "Cascadia Mono",Consolas,monospace;color:#89b3b7;flex:0 0 auto;font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:reduce){.core-3d,.core-ring-3d,.primary-node.active:after,.more-list,.qs-cam-thumb .rec,.qs-cam-thumb .cam-sweep{animation:none!important}}
+.stage{grid-column:2;grid-row:2;position:relative;min-width:0;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:1}.stage-coordinate{position:absolute;top:24px;left:28px;color:#3e6970;font:300 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.18em}.signal-avatar{position:absolute;inset:0;width:100%;height:calc(100% - 135px)}.cognition-field{position:absolute;inset:0;width:100%;height:calc(100% - 135px);pointer-events:none;z-index:1}.identity-line{position:absolute;bottom:128px;width:min(660px,76%);text-align:center}.identity-line span{display:inline-block;font:500 11px "Cascadia Mono",Consolas,monospace;letter-spacing:.34em;color:var(--signal-solid);text-shadow:0 0 12px rgba(var(--signal),.7);animation:identity-glow 2.6s ease-in-out infinite}@keyframes identity-glow{0%,100%{text-shadow:0 0 10px rgba(var(--signal),.55)}50%{text-shadow:0 0 22px rgba(var(--signal),1),0 0 40px rgba(var(--signal),.5)}}.identity-line span.reply-tone-concern,.identity-line span.reply-tone-uncertain{color:#ffc14f;animation:identity-glow-warn 2.6s ease-in-out infinite}@keyframes identity-glow-warn{0%,100%{text-shadow:0 0 10px rgba(255,193,79,.5)}50%{text-shadow:0 0 22px rgba(255,193,79,1),0 0 40px rgba(255,193,79,.5)}}.composer{position:absolute;bottom:48px;width:min(760px,84%);height:64px;display:grid;grid-template-columns:48px 1fr 48px 44px;align-items:center;border:1px solid rgba(var(--signal),.42);background:rgba(2,12,17,.86);clip-path:polygon(18px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 18px);box-shadow:0 0 42px rgba(var(--signal),.08)}.composer input{height:100%;border:0;outline:0;background:transparent;color:#e6feff;padding:0 10px;font-size:15px}.composer input::placeholder{color:#45676e}.voice-button,.send-button,.hands-free-button{border:0;background:transparent;color:var(--signal-solid);font-size:20px;cursor:pointer}.send-button:disabled{opacity:.25}.hands-free-button{font-size:17px;opacity:.35;filter:grayscale(1)}.hands-free-button.active{opacity:1;filter:none;text-shadow:0 0 10px rgba(var(--signal),.8)}.error-strip{position:absolute;bottom:18px;max-width:760px;color:#ff8098;font:400 10px "Cascadia Mono",Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.telemetry{grid-column:3;grid-row:2;padding:24px 18px 18px 10px;border-left:1px solid var(--line);background:rgba(1,7,10,.5);z-index:2;overflow:auto}.telemetry section{border:1px solid var(--line);background:var(--panel);margin-bottom:12px;padding:14px 15px;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%)}.telemetry section>header{font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.22em;color:var(--signal-solid);padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid rgba(var(--signal),.09)}.metric{display:flex;justify-content:space-between;margin:11px 0;font:400 9px "Cascadia Mono",Consolas,monospace;color:#6f9197}.metric b{font-weight:400;color:#b4d8da}.provider{display:flex;align-items:center}.provider div{display:flex;flex-direction:column}.provider b{font:500 11px "Cascadia Mono",Consolas,monospace;color:#c8eeee}.provider span{font:300 9px "Cascadia Mono",Consolas,monospace;color:#5b7e84;margin-top:5px}.ledger{min-height:195px}.event{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.035)}.event i{width:5px;height:5px;border-radius:50%;background:#6f8b8e;margin-top:5px}.event i.verified{background:#74ff84;box-shadow:0 0 8px #74ff84}.event i.failed,.event i.blocked{background:#ff4a6e}.event div{display:flex;flex-direction:column}.event b{font:400 9px "Cascadia Mono",Consolas,monospace;text-transform:uppercase;color:#b8d8db}.event span,.empty{font:300 9px "Cascadia Mono",Consolas,monospace;color:#587980;margin:4px 0 0}.ethos{font:300 12px/1.8 "Cascadia Mono",Consolas,monospace;color:#77999e;margin:0}
+.overlay{position:fixed;inset:0;background:rgba(0,3,6,.82);backdrop-filter:blur(14px);display:grid;place-items:center;z-index:20}.settings-card{width:min(920px,calc(100vw - 36px));max-height:calc(100vh - 34px);border:1px solid rgba(var(--signal),.36);background:linear-gradient(145deg,#061017,#02080c);padding:24px;box-shadow:0 24px 100px #000;clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));display:flex;flex-direction:column}.settings-card header{display:flex;justify-content:space-between;align-items:flex-start;flex:0 0 auto}.settings-card header span{font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.22em;color:var(--signal-solid)}.settings-card h2{margin:7px 0 0;font-size:25px;font-weight:400}.settings-card header button{border:0;background:transparent;color:#799da2;font-size:24px;cursor:pointer}.settings-card>p{color:#739399;font-size:12px;line-height:1.6;margin:13px 0 14px}.settings-scroll{overflow:auto;padding:0 10px 12px 1px}
+/* Redesigned from 13 flat h3-delimited blocks in one continuous scroll
+   into individually collapsible sections (approved from a live mockup —
+   Robbie: "hard to read and follow... humans are a simple creature").
+   .settings-essentials surfaces the 3 things almost everyone actually
+   checks without opening anything; everything else collapses out of the
+   way until asked for. */
+.settings-essentials{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:12px 0;flex:0 0 auto}
+.settings-essential{border:1px solid var(--line);background:rgba(4,15,21,.6);padding:11px 13px;text-align:left;cursor:pointer;transition:border-color .2s ease}
+.settings-essential:hover{border-color:rgba(var(--signal),.4)}
+.settings-essential b{display:block;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em;color:var(--signal-solid)}
+.settings-essential span{display:block;margin-top:4px;font-size:11px;color:#b4d8da;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings-essential i{display:inline-flex;margin-top:6px;font:500 8px "Cascadia Mono",Consolas,monospace;letter-spacing:.06em;font-style:normal;color:#ff8098}
+.settings-essential i.ok{color:#74ff84}
+.settings-section{border:1px solid var(--line);margin-top:9px;background:rgba(3,12,16,.5)}
+.settings-section-head{display:flex;align-items:center;gap:12px;width:100%;padding:13px 15px;border:0;background:transparent;cursor:pointer;text-align:left;font-family:inherit}
+.settings-section-icon{width:28px;height:28px;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;color:var(--signal-solid);flex:0 0 auto;font-size:13px}
+.settings-section-titles{flex:1;min-width:0}
+.settings-section-titles b{display:block;font-size:13px;font-weight:500;color:#e6feff}
+.settings-section-titles span{display:block;margin-top:2px;font-size:10.5px;color:#6f9197}
+.settings-section-chevron{color:#4e7077;flex:0 0 auto;font-size:11px;transition:color .2s ease}
+.settings-section.open .settings-section-chevron{color:var(--signal-solid)}
+.settings-section-body{padding:2px 15px 18px;animation:settings-section-in .25s ease-out}
+@keyframes settings-section-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.settings-card label{display:block;color:#76959b;font:400 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em;margin-top:10px}.settings-card label em{float:right;color:#58b9ad;font-style:normal;font-size:8px}.settings-card input,.settings-card select{display:block;width:100%;height:40px;border:1px solid var(--line);outline:0;background:#020a0f;color:#dfffff;padding:0 12px;margin-top:7px}.settings-card input:focus,.settings-card select:focus{border-color:rgba(var(--signal),.55)}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.provider-keys{grid-template-columns:repeat(3,minmax(0,1fr))}.settings-grid.compact{grid-template-columns:minmax(0,1fr) 180px;align-items:end}.provider-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.provider-tabs button,.secondary{height:39px;border:1px solid rgba(var(--signal),.16);background:rgba(2,15,18,.72);color:#71979a;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em;cursor:pointer}.provider-tabs button.selected{border-color:rgba(var(--signal),.65);background:rgba(var(--signal),.12);color:var(--signal-solid);box-shadow:inset 0 0 18px rgba(var(--signal),.06)}.provider-tabs button i{display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:50%;background:#243c3f}.provider-tabs button i.stored{background:#71ff95;box-shadow:0 0 8px #71ff95}.voice-console{border-left:1px solid rgba(var(--signal),.22);padding-left:13px}.voice-sliders{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.voice-sliders label b{float:right;color:var(--signal-solid)}.voice-sliders input{height:18px;padding:0;accent-color:var(--signal-solid)}.settings-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.settings-actions .secondary{padding:0 18px}.context-note{margin:10px 0;color:#69888d;font-size:11px}.settings-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid rgba(var(--signal),.17);padding-top:13px;flex:0 0 auto}.security-note{margin:0;color:#6f9398;font:400 9px "Cascadia Mono",Consolas,monospace}.security-note i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#74ff84;box-shadow:0 0 8px #74ff84;margin-right:7px}.settings-status{display:block;color:#9bc5c7;font-size:10px;margin-top:5px;max-width:520px}.primary{width:220px;height:46px;border:1px solid rgba(var(--signal),.5);background:rgba(var(--signal),.12);color:var(--signal-solid);font:500 10px "Cascadia Mono",Consolas,monospace;letter-spacing:.18em;cursor:pointer}.primary:disabled{opacity:.25}@media(max-width:760px){.provider-keys,.settings-grid,.voice-sliders{grid-template-columns:1fr}.settings-grid.compact{grid-template-columns:1fr}.settings-card{padding:17px}.settings-footer{align-items:flex-end}.primary{width:180px}}
+@media(max-width:1180px){.shell{grid-template-columns:180px minmax(520px,1fr) 260px}.telemetry{padding-left:8px}.rail{padding-left:8px;padding-right:8px}}@media(max-width:900px){.shell{grid-template-columns:92px 1fr}.telemetry{display:none}.rail button{font-size:0}.rail button span{font-size:10px}.rail-index{display:none}.stage{grid-column:2}.shell:before{left:92px}}
+.presence-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px}.presence-row>i{width:7px;height:7px;border-radius:50%;background:#52676b;box-shadow:none}.presence-row div{display:flex;flex-direction:column;min-width:0}.presence-row b{font:500 10px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em;color:#b8d8db}.presence-row span{font:300 8px "Cascadia Mono",Consolas,monospace;color:#587980;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.presence-row button{border:1px solid rgba(var(--signal),.24);background:rgba(var(--signal),.035);color:#6e999d;padding:6px 7px;font:400 7px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em;cursor:pointer}.presence-locked .presence-row>i{background:#66ffad;box-shadow:0 0 12px #66ffad}.presence-locked .presence-row b{color:#66ffad}.presence-starting .presence-row>i,.presence-searching .presence-row>i,.presence-lost .presence-row>i{background:var(--signal-solid);box-shadow:0 0 10px rgba(var(--signal),.8);animation:presence-pulse 1.1s ease-in-out infinite}.presence-denied .presence-row>i,.presence-error .presence-row>i{background:#ff4a6e;box-shadow:0 0 10px #ff4a6e}.presence-denied .presence-row b,.presence-error .presence-row b{color:#ff8098}.presence-busy .presence-row>i{background:#ffb02a;box-shadow:0 0 10px #ffb02a}.presence-busy .presence-row b{color:#ffc565}@keyframes presence-pulse{50%{opacity:.25;transform:scale(.72)}}
+.voice-latency{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(var(--signal),.12)}.voice-latency span{display:flex!important;flex-direction:column;color:#4c7379!important;font:500 6px "Cascadia Mono",Consolas,monospace;letter-spacing:.13em}.voice-latency b{color:#7fffdc!important;font-size:8px;margin-top:2px}
+.diagnostic-console>div{grid-template-columns:8px minmax(0,1fr) auto}.diagnostic-console>div>button{height:27px;border:1px solid rgba(var(--signal),.25);background:rgba(var(--signal),.05);color:var(--signal-solid);font:600 7px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em;padding:0 9px;cursor:pointer}
+.voice-button.recording{color:#ff496b;text-shadow:0 0 14px #ff496b;animation:recording-pulse .72s ease-in-out infinite}@keyframes recording-pulse{50%{transform:scale(.82);opacity:.55}}
+
+/* Global legibility and input ergonomics. */
+.composer{height:70px}.composer input{font-size:17px;padding:0 14px}.error-strip{font-size:12px}.settings-card label{font-size:12px}.settings-card label em{font-size:11px}.settings-card h3{font-size:12px}.settings-card>p,.context-note{font-size:14px}.settings-status,.security-note{font-size:12px}.provider-tabs button,.secondary,.primary{font-size:12px}.settings-card input,.settings-card select{font-size:14px}.module-grid b{font-size:12px}.module-grid span{font-size:10px}.record-list time{font-size:10px}.record-list p{font-size:15px}
+.module-panel{width:min(840px,86%);height:min(660px,82%);padding:38px 42px;border:1px solid rgba(var(--signal),.25);background:linear-gradient(145deg,rgba(3,17,23,.94),rgba(1,8,12,.88));clip-path:polygon(0 22px,22px 0,100% 0,100% calc(100% - 22px),calc(100% - 22px) 100%,0 100%);overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(var(--signal),.5) rgba(var(--signal),.04);box-shadow:0 0 70px rgba(var(--signal),.06)}.module-panel::-webkit-scrollbar{width:7px}.module-panel::-webkit-scrollbar-track{background:rgba(var(--signal),.035)}.module-panel::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(var(--signal),.7),rgba(var(--signal),.18));border:2px solid #031016;border-radius:8px}.module-panel>header span{font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.24em;color:var(--signal-solid)}.module-panel h1{font-size:31px;font-weight:300;margin:12px 0;color:#d8f4f6}.module-panel>header p{max-width:650px;color:#73959b;font-size:13px;line-height:1.65}.module-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:28px}.module-grid article{display:flex;align-items:center;gap:12px;border:1px solid rgba(var(--signal),.12);padding:14px;background:rgba(var(--signal),.025)}.module-grid i{width:7px;height:7px;border-radius:50%;background:#59686b}.module-grid i.enabled{background:#65ffab;box-shadow:0 0 10px #65ffab}.module-grid div{display:flex;flex-direction:column}.module-grid b{font:400 10px "Cascadia Mono",Consolas,monospace;color:#b8d8db}.module-grid span{font:300 8px "Cascadia Mono",Consolas,monospace;color:#52747a;margin-top:5px}.panel-entry{display:grid;grid-template-columns:1fr 100px;margin:26px 0 18px;border:1px solid rgba(var(--signal),.2)}.panel-entry input{height:48px;border:0;background:rgba(0,0,0,.22);padding:0 15px;color:#d8f4f6;outline:none}.panel-entry button{border:0;border-left:1px solid rgba(var(--signal),.2);background:rgba(var(--signal),.05);color:var(--signal-solid);font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.15em}.record-list article{border-bottom:1px solid rgba(var(--signal),.09);padding:14px 5px}.record-list time{font:300 8px "Cascadia Mono",Consolas,monospace;color:#4f7379;letter-spacing:.08em}.record-list p{margin:7px 0 0;color:#a8cdd0;font-size:13px}.record-list article.completed{opacity:.48}.empty-state{padding:40px;text-align:center;color:#4f7379;font:300 10px "Cascadia Mono",Consolas,monospace}
+
+/* Robbie's commissioned skull layer, rebuilt for Axiom's clean-room renderer. */
+.modded-avatar{--head-x:0px;--head-y:0px;--head-yaw:0deg;--head-pitch:0deg;--head-roll:0deg;--gaze-x:0px;--gaze-y:0px;--eye-open:1;--jaw-open:0;--mouth-wide:0;--mouth-round:0;--jaw-closed:1;--jaw-half:0;--jaw-open-frame:0;--avatar-rgb:32,255,211;--speech-energy:0;overflow:hidden;perspective:1100px}.modded-wave{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:screen}.modded-ring,.modded-head{position:absolute;left:50%;top:48%;width:min(590px,66%);aspect-ratio:1/1}.modded-ring{z-index:3;transform:translate3d(-50%,-50%,0) scale(.992);pointer-events:none;filter:drop-shadow(0 0 8px rgba(var(--avatar-rgb),.5)) drop-shadow(0 0 24px rgba(var(--avatar-rgb),.18));will-change:auto}.modded-ring img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none;mix-blend-mode:screen;-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 0 57.5%,#000 61.5% 70%,transparent 72% 100%);mask-image:radial-gradient(circle at 50% 50%,transparent 0 57.5%,#000 61.5% 70%,transparent 72% 100%)}.modded-head{z-index:4;transform:translate3d(calc(-50% + var(--head-x)),calc(-50% + var(--head-y)),0) rotateX(var(--head-pitch)) rotateY(var(--head-yaw)) rotateZ(var(--head-roll)) scale(var(--head-scale));transform-origin:50% 49%;transform-style:preserve-3d;will-change:transform;filter:drop-shadow(0 0 8px rgba(var(--avatar-rgb),.52)) drop-shadow(0 0 26px rgba(var(--avatar-rgb),.22));transition:filter .28s ease}.modded-head img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none;mix-blend-mode:screen;-webkit-mask-image:radial-gradient(circle at 50% 50%,#000 0 58.5%,transparent 62.5% 100%);mask-image:radial-gradient(circle at 50% 50%,#000 0 58.5%,transparent 62.5% 100%)}.modded-base{z-index:2}.modded-mouth-frame{clip-path:inset(57% 13% 5% 13%);-webkit-mask-image:linear-gradient(to bottom,transparent 56.5%,#000 60%,#000 91%,transparent 96%),radial-gradient(circle at 50% 50%,#000 0 58.5%,transparent 62.5% 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 56.5%,#000 60%,#000 91%,transparent 96%),radial-gradient(circle at 50% 50%,#000 0 58.5%,transparent 62.5% 100%);mask-composite:intersect;z-index:3;transform-origin:50% 63%;transform:scaleX(calc(1 + var(--mouth-wide) * .022 - var(--mouth-round) * .018));mix-blend-mode:normal!important;will-change:opacity,transform}.modded-jaw-half{opacity:var(--jaw-half)}.modded-jaw-open{opacity:var(--jaw-open-frame)}.modded-eyes{position:absolute;inset:0;z-index:5;pointer-events:none}.modded-eyes>i{position:absolute;top:48.2%;width:64px;height:44px;transform:translate(-50%,-50%) scaleY(var(--eye-open));border-radius:50%;background:radial-gradient(ellipse,rgba(var(--avatar-rgb),.13),transparent 70%);filter:drop-shadow(0 0 9px rgba(var(--avatar-rgb),.8));overflow:hidden}.modded-eyes>i.left{left:38.3%}.modded-eyes>i.right{left:61.7%}.modded-eyes b{position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;background:#eaffff;transform:translate3d(calc(-50% + var(--gaze-x)),calc(-50% + var(--gaze-y)),0);box-shadow:0 0 4px #fff,0 0 10px rgb(var(--avatar-rgb)),0 0 24px rgb(var(--avatar-rgb));will-change:transform}.modded-eyes b:before{content:"";position:absolute;left:50%;top:50%;width:18px;height:18px;border:1px solid rgba(var(--avatar-rgb),.72);border-radius:50%;transform:translate(-50%,-50%);box-shadow:inset 0 0 8px rgba(var(--avatar-rgb),.45),0 0 8px rgba(var(--avatar-rgb),.4)}.modded-speech-aura{position:absolute;z-index:1;left:30%;right:30%;top:58%;height:24%;background:radial-gradient(ellipse,rgba(var(--avatar-rgb),.32),transparent 67%);opacity:calc(.08 + var(--speech-energy) * .78);filter:blur(12px);mix-blend-mode:screen}.emotion-happy .modded-head{filter:drop-shadow(0 0 11px rgba(var(--avatar-rgb),.62)) drop-shadow(0 0 34px rgba(var(--avatar-rgb),.25))}.emotion-angry .modded-eyes>i{background:radial-gradient(ellipse,rgba(255,35,48,.48),transparent 70%);filter:drop-shadow(0 0 14px #ff263e)}.emotion-angry .modded-eyes b{box-shadow:0 0 5px #fff,0 0 12px #ff263e,0 0 32px #ff263e}.emotion-excited .modded-head{animation:avatar-excited .65s ease-in-out infinite alternate}@keyframes avatar-excited{to{filter:drop-shadow(0 0 15px rgba(var(--avatar-rgb),.8)) drop-shadow(0 0 42px rgba(var(--avatar-rgb),.32))}}@media(prefers-reduced-motion:reduce){.modded-head{transform:translate(-50%,-50%)!important}.emotion-excited .modded-head{animation:none}}
+
+/* Axiom avatar v2: the composite artwork is split into two immutable visual
+   responsibilities. The SVG owns the stationary ring; only this clipped,
+   perspective head is allowed to receive tracking transforms. */
+.modded-avatar{--light-x:50%;--light-y:42%;--depth-shift-x:0px;--depth-shift-y:0px;perspective:1250px}
+.modded-ring svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;user-select:none;mix-blend-mode:screen}
+.modded-head img{-webkit-mask-image:none!important;mask-image:none!important;clip-path:polygon(50% 13%,42% 13.1%,36% 14%,31% 17%,27% 23%,24% 34%,23.2% 47%,26% 55%,30% 60%,32% 69%,34.5% 77%,38.5% 84%,44.5% 87.8%,50% 88.8%,55.5% 87.8%,61.5% 84%,65.5% 77%,68% 69%,70% 60%,74% 55%,76.8% 47%,76% 34%,73% 23%,69% 17%,64% 14%,58% 13.1%)}
+.modded-depth-back{display:none}
+.modded-base{transform:translateZ(0)}
+.modded-mouth-void{position:absolute;z-index:2;left:32%;right:32%;top:57.5%;height:31%;clip-path:polygon(4% 0,96% 0,84% 72%,66% 100%,34% 100%,16% 72%);background:radial-gradient(ellipse at 50% 35%,rgba(0,7,8,.97) 0 48%,rgba(0,17,17,.9) 72%,transparent 96%);filter:blur(.25px)}
+.modded-mouth-part{position:absolute;inset:0;z-index:3;transform-style:preserve-3d;pointer-events:none;will-change:transform}
+.modded-mouth-part .modded-mouth-frame{clip-path:none!important;-webkit-mask-image:none!important;mask-image:none!important;transform:none!important;transition:none!important;backface-visibility:hidden;filter:contrast(1.12) saturate(1.08);mix-blend-mode:screen!important}
+.modded-upper-mouth{clip-path:polygon(33% 56%,67% 56%,67% 64.15%,33% 64.15%);transform:translate3d(0,var(--upper-lift),16px) scaleX(var(--mouth-width)) scaleY(var(--mouth-height));transform-origin:50% 64.15%}
+.modded-lower-mouth{clip-path:polygon(33% 64.15%,67% 64.15%,63% 79%,57% 89%,43% 89%,37% 79%);transform:translate3d(0,var(--jaw-drop),17px) rotateZ(var(--mouth-asymmetry)) rotateX(var(--jaw-swing)) scaleX(var(--mouth-width)) scaleY(var(--mouth-height));transform-origin:50% 64.15%}
+.modded-jaw-closed{opacity:var(--jaw-closed)}
+.modded-volume-light{position:absolute;inset:8% 18% 8%;z-index:4;clip-path:ellipse(46% 49% at 50% 50%);background:radial-gradient(circle at var(--light-x) var(--light-y),rgba(255,255,255,.16),rgba(var(--avatar-rgb),.045) 27%,transparent 57%),linear-gradient(105deg,rgba(255,255,255,.055),transparent 38% 68%,rgba(0,0,0,.22));mix-blend-mode:screen;transform:translateZ(24px);pointer-events:none}
+.modded-eyes{transform:translateZ(30px)}
+
+.camera-intel{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.65fr);gap:14px;margin-top:18px}.camera-intel .vision-capture{grid-template-columns:1fr;align-content:start;gap:10px;margin-top:0}.camera-intel .vision-preview{min-height:220px}.camera-intel .vision-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.camera-intel .vision-actions button{min-width:0;border-color:rgba(var(--signal),.42);background:linear-gradient(180deg,rgba(var(--signal),.12),rgba(var(--signal),.045));color:#9dffff;text-shadow:0 0 10px rgba(var(--signal),.55)}.camera-intel .vision-actions button:nth-child(3){grid-column:1/-1}.people-console{border:1px solid rgba(var(--signal),.2);background:rgba(0,8,12,.74);padding:14px}.people-console>header{display:flex;justify-content:space-between;border-bottom:1px solid rgba(var(--signal),.12);padding-bottom:10px;color:var(--signal-solid);font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.14em}.people-console>header span{color:#55777d}.recognition-now{display:flex;align-items:center;gap:11px;padding:16px 3px}.recognition-now>i{width:10px;height:10px;border-radius:50%;background:#ffb02a;box-shadow:0 0 10px #ffb02a}.recognition-now>i.known{background:#65ffab;box-shadow:0 0 12px #65ffab}.recognition-now p{display:flex;flex-direction:column;margin:0}.recognition-now b{color:#d8f4f6;font-size:12px}.recognition-now span{color:#66878c;font-size:9px;margin-top:4px}.person-enroll{display:grid;grid-template-columns:1fr 92px;border:1px solid rgba(var(--signal),.2)}.person-enroll input{min-width:0;height:38px;border:0;background:#01080c;color:#dcffff;padding:0 10px;outline:0}.person-enroll button,.people-roster button{border:0;border-left:1px solid rgba(var(--signal),.18);background:rgba(var(--signal),.06);color:var(--signal-solid);font:500 8px "Cascadia Mono",Consolas,monospace;letter-spacing:.08em}.person-enroll button:disabled{opacity:.3}.people-roster{max-height:118px;overflow:auto;margin-top:10px}.people-roster article{display:grid;grid-template-columns:18px 1fr 58px;align-items:center;min-height:31px;border-bottom:1px solid rgba(var(--signal),.08);color:#72969b;font-size:10px}.people-roster article b{color:#bce0e2;font-weight:400}.people-roster button{height:24px;border:1px solid rgba(var(--signal),.14)}@media(max-width:1050px){.camera-intel{grid-template-columns:1fr}.camera-intel .vision-preview{min-height:160px}}
+
+.speaker-console{margin-top:16px;border:1px solid rgba(var(--signal),.2);background:linear-gradient(135deg,rgba(2,18,22,.94),rgba(1,8,12,.98));padding:14px;box-shadow:inset 3px 0 0 rgba(var(--signal),.55),0 0 24px rgba(var(--signal),.04)}.speaker-console>header{display:flex;justify-content:space-between;border-bottom:1px solid rgba(var(--signal),.12);padding-bottom:10px;color:var(--signal-solid);font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.14em}.speaker-console>header span{color:#55777d}.speaker-lock-state{display:flex;align-items:center;gap:12px;padding:14px 3px}.speaker-lock-state>i{width:11px;height:11px;border-radius:50%;background:#59dfff;box-shadow:0 0 12px #59dfff}.speaker-lock-state.verified>i{background:#65ffab;box-shadow:0 0 14px #65ffab}.speaker-lock-state.rejected>i{background:#ff465d;box-shadow:0 0 14px #ff465d}.speaker-lock-state.enrolling>i,.speaker-lock-state.listening>i{animation:speaker-pulse .75s ease-in-out infinite alternate}.speaker-lock-state p{display:flex;flex-direction:column;margin:0}.speaker-lock-state b{color:#d8f4f6;font-size:11px}.speaker-lock-state span{color:#66878c;font-size:9px;margin-top:4px}.speaker-console .person-enroll{grid-template-columns:1fr 118px}.speaker-roster{max-height:94px}@keyframes speaker-pulse{to{transform:scale(1.45);filter:brightness(1.5)}}
+
+.microphone-console{margin:10px 0 14px;padding:10px 12px;border:1px solid rgba(var(--signal),.16);background:rgba(2,13,17,.7)}.microphone-console .secondary{padding:0 12px}.microphone-readout{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:9px;color:#54777b;font:500 8px "Cascadia Mono",Consolas,monospace;letter-spacing:.09em}.microphone-readout b{color:#7ddcd5}.mouth-calibration{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0 4px;padding:10px 12px;border:1px solid rgba(var(--signal),.2);background:linear-gradient(90deg,rgba(var(--signal),.08),rgba(var(--signal),.02))}.mouth-calibration>div{display:flex;flex-direction:column}.mouth-calibration b{color:#bdf7f1;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em}.mouth-calibration span{margin-top:4px;color:#5c8588;font:400 8px "Cascadia Mono",Consolas,monospace}.mouth-calibration .secondary{padding:0 14px;white-space:nowrap}.speaker-lock-state.noise>i{background:#ffb02a;box-shadow:0 0 14px #ffb02a}
+.resume-task{min-width:66px;height:27px;border:1px solid rgba(255,176,42,.42);background:rgba(255,176,42,.08);color:#ffd27a;font:600 7px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em;cursor:pointer}
+
+/* Smart-home command plane (Homebridge). */
+.smart-home-panel{margin-top:16px;border:1px solid rgba(var(--signal),.24);background:linear-gradient(145deg,rgba(2,19,23,.96),rgba(0,8,12,.98));box-shadow:inset 3px 0 0 rgba(var(--signal),.7),0 0 30px rgba(var(--signal),.06);padding:15px}.smart-home-panel>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(var(--signal),.14);padding-bottom:12px}.smart-home-panel>header div{display:flex;flex-direction:column}.smart-home-panel>header span{font:500 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.18em;color:#567c82}.smart-home-panel>header b{margin-top:6px;font:600 13px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em;color:#c9f5f3}.smart-home-panel>header>i{width:10px;height:10px;border-radius:50%;background:#ff5c72;box-shadow:0 0 12px #ff5c72}.smart-home-panel>header>i.online{background:#65ffab;box-shadow:0 0 14px #65ffab}.smart-home-empty{padding:25px 10px;text-align:center}.smart-home-empty b{color:#83dcd5;font:600 12px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em}.smart-home-empty p{color:#6b9398;font-size:13px;line-height:1.55}.smart-home-empty.fault b{color:#ff8294}.smart-home-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.smart-home-stats article{display:flex;flex-direction:column;align-items:center;border:1px solid rgba(var(--signal),.12);background:rgba(var(--signal),.025);padding:10px}.smart-home-stats strong{color:#b9fff1;font-size:22px;font-weight:300}.smart-home-stats span{margin-top:4px;color:#52777b;font:600 8px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em}.smart-home-entities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;max-height:250px;overflow:auto}.smart-home-entities button{display:grid;grid-template-columns:9px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:48px;border:1px solid rgba(var(--signal),.1);background:rgba(0,0,0,.15);text-align:left;cursor:pointer;padding:7px 9px}.smart-home-entities button:hover{border-color:rgba(var(--signal),.42);background:rgba(var(--signal),.07)}.smart-home-entities i{width:7px;height:7px;border-radius:50%;background:#597579}.smart-home-entities i.active{background:#67ffae;box-shadow:0 0 10px #67ffae}.smart-home-entities i.fault{background:#ff5c72;box-shadow:0 0 10px #ff5c72}.smart-home-entities p{display:flex;min-width:0;flex-direction:column;margin:0}.smart-home-entities b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#bcdfe0;font-size:11px}.smart-home-entities span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:#517479;font:400 8px "Cascadia Mono",Consolas,monospace}.smart-home-entities em{color:#71d9d1;font:600 9px "Cascadia Mono",Consolas,monospace;text-transform:uppercase}.smart-home-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.smart-home-actions button{height:36px;border:1px solid rgba(var(--signal),.26);background:rgba(var(--signal),.06);color:#8ff5e8;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em;cursor:pointer}@media(max-width:1050px){.smart-home-entities{grid-template-columns:1fr}}
+
+/* Final cascade for accessible text on desktop displays. */
+.composer{height:70px}.composer input{font-size:17px;padding:0 14px}.error-strip{font-size:12px}.settings-card label{font-size:12px}.settings-card label em{font-size:11px}.settings-card h3{font-size:12px}.settings-card>p,.context-note{font-size:14px}.settings-status,.security-note{font-size:12px}.provider-tabs button,.secondary,.primary{font-size:12px}.settings-card input,.settings-card select{font-size:14px}.module-grid b{font-size:12px}.module-grid span{font-size:10px}.record-list time{font-size:10px}.record-list p{font-size:15px}.people-console>header,.speaker-console>header{font-size:11px}.recognition-now span,.speaker-lock-state span{font-size:11px}.person-enroll button,.people-roster button{font-size:10px}.microphone-readout{font-size:11px}.mouth-calibration b{font-size:12px}.mouth-calibration span{font-size:11px}.resume-task{min-height:32px;height:auto;padding:0 10px;font-size:10px}
+
+/* Jarvis-proven photographic jaw composite, adapted to Axiom's icon artwork.
+   The fixed upper skull and the animated jaw deliberately overlap under a
+   feathered mask. There is no synthetic black mouth layer and no CSS jaw
+   translation; the three complete jaw frames carry the anatomical motion. */
+.modded-base{clip-path:inset(0 0 34.5% 0);mix-blend-mode:screen!important}
+.modded-mouth-part .modded-mouth-frame{transform:none!important;transition:opacity 12ms linear!important;mix-blend-mode:screen!important}
+.modded-lower-mouth{clip-path:polygon(32% 63.1%,68% 63.1%,65% 80%,58% 91%,42% 91%,35% 80%);-webkit-mask-image:linear-gradient(to bottom,transparent 62.7%,#000 64.6%,#000 100%);mask-image:linear-gradient(to bottom,transparent 62.7%,#000 64.6%,#000 100%);transform:none!important;transform-origin:50% 65%;will-change:opacity}
+
+.recognition-now>i.pending{background:#ffb02a;box-shadow:0 0 10px #ffb02a;animation:axiom-pending-pulse 1.6s ease-in-out infinite}
+@keyframes axiom-pending-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.liveness-state{display:flex;align-items:flex-start;gap:10px;padding:9px 3px 14px;border-top:1px solid rgba(var(--signal),.1);margin-top:-4px}
+.liveness-state>i{flex:0 0 auto;width:7px;height:7px;margin-top:4px;border-radius:50%;background:#ffb02a;box-shadow:0 0 8px #ffb02a}
+.liveness-state.live>i{background:#65ffab;box-shadow:0 0 10px #65ffab}
+.liveness-state p{margin:0;display:flex;flex-direction:column;gap:3px}
+.liveness-state b{color:#c9dfe0;font:600 8px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em}
+.liveness-state.live b{color:#65ffab}
+.liveness-state span{color:#5f8388;font-size:9px;line-height:1.5}
+.guided-enrollment{border:1px solid rgba(var(--signal),.28);background:rgba(2,14,18,.65);padding:12px}
+.guided-enrollment>header{display:flex;justify-content:space-between;align-items:baseline;color:var(--signal-solid);font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em}
+.guided-enrollment>header span{color:#8fc4c7}
+.guided-instruction{margin:9px 0 11px;color:#d8f4f6;font-size:13px;line-height:1.5}
+.guided-steps{display:flex;gap:6px;margin-bottom:9px}
+.guided-steps>i{flex:1;height:5px;border-radius:3px;background:rgba(var(--signal),.16)}
+.guided-steps>i.active{background:#ffb02a;box-shadow:0 0 8px #ffb02a}
+.guided-steps>i.done{background:#65ffab;box-shadow:0 0 8px #65ffab}
+.guided-steps>i.skipped{background:#ff6b6b;box-shadow:0 0 8px #ff6b6b}
+.guided-capture-count{color:#6b9195;font-size:10px;letter-spacing:.04em}
+.guided-enrollment .secondary{margin-top:9px;width:100%;height:32px}
+.guided-review-list{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}
+.guided-review-list>div{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 4px;border:1px solid rgba(var(--signal),.14);font-size:8px;letter-spacing:.04em;color:#7fa1a6;text-align:center}
+.guided-review-list>div>i{width:8px;height:8px;border-radius:50%;background:rgba(255,107,107,.7)}
+.guided-review-list>div.ok>i{background:#65ffab;box-shadow:0 0 8px #65ffab}
+.guided-review-list>div.ok{color:#a9d8cf}
+.guided-review .settings-actions{margin-top:4px}
+/* Previously had no size of its own — every nested rule below fills "100%
+   of the parent," but with nothing here to anchor that chain to the .stage
+   container it renders in, the browser fell back to sizing the whole
+   window off the video element's own tiny native resolution (a real live
+   symptom: a small circular Ring fisheye frame floating in an otherwise
+   empty box). Pulled out of normal flex flow and given an explicit box
+   against .stage, the same pattern .signal-avatar/.composer already use,
+   so every camera view — one or several — now has a real size to fill. */
+.live-camera-window{position:absolute;top:56px;left:24px;right:24px;bottom:132px;display:flex;flex-direction:column;border:1px solid rgba(var(--signal),.18);background:rgba(1,13,14,.94);z-index:2}
+.live-camera-window>header{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.1em;color:var(--signal-solid);border-bottom:1px solid rgba(var(--signal),.14)}
+.live-camera-window>header span{color:#8fc4c7;font-size:8px;font-weight:400}
+.live-camera-window>header button{background:none;border:none;color:#8fc4c7;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px}
+.live-camera-window>footer{flex:0 0 auto;padding:8px 16px;border-top:1px solid rgba(var(--signal),.14);color:#587980;font-size:10px}
+.live-camera-window>footer span{color:var(--signal-solid);letter-spacing:.1em;margin-right:8px}
+.live-camera-window .camera-body{display:flex;width:100%;flex:1;min-height:0}
+.live-camera-window .camera-stage{position:relative;flex:1;min-width:0;height:100%}
+.live-camera-window .camera-stage video,.live-camera-window .camera-stage canvas.detection-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.live-camera-window .camera-stage video{background:#000;transform:scaleX(-1)}
+.live-camera-window .camera-stage canvas.detection-overlay{background:transparent;pointer-events:none}
+/* Jarvis-style materialization, round-panel / neural-link edition
+   (Robbie approved from a live mockup: claude.ai/code/artifact/7fe91457).
+   Each camera is a circle echoing the skull's own ring geometry, summoned
+   with a particle burst + self-drawing ring outline + targeting ticks +
+   scan-line, connected to the skull by an organic multi-strand nerve
+   bundle rather than a single clean line. Panels sit in a fixed arc to
+   the right of the skull by default — --panel-index (set inline per
+   camera in App.tsx) staggers them vertically — never touching the
+   skull's own space; expanding one (still a circle, just bigger) is the
+   one deliberate exception. Both states use position:fixed with only the
+   coordinates differing, so expand/collapse is a genuine transition. */
+.ring-skull-anchor{position:absolute;left:50%;top:50%;width:1px;height:1px;pointer-events:none}
+.ring-particle-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:25;pointer-events:none}
+.ring-connectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+.ring-connectors .ring-strand{fill:none;stroke-linecap:round;transition:opacity .4s ease}
+.ring-connectors .ring-strand.primary{stroke:rgba(var(--signal),.95);stroke-width:2.4;filter:drop-shadow(0 0 5px rgba(var(--signal),1)) drop-shadow(0 0 14px rgba(var(--signal),.8))}
+.ring-connectors .ring-strand.secondary{stroke:rgba(var(--signal),.65);stroke-width:1.4;filter:drop-shadow(0 0 6px rgba(var(--signal),.6))}
+.ring-connectors .ring-strand.tendril{stroke:rgba(var(--signal),.4);stroke-width:.9;stroke-dasharray:2 4}
+.ring-connectors .ring-synapse{fill:#eafeff;filter:drop-shadow(0 0 6px #eafeff) drop-shadow(0 0 12px rgba(var(--signal),.9));animation:ring-synapse-pulse 2.4s ease-in-out infinite}
+@keyframes ring-synapse-pulse{0%,100%{opacity:.65;r:2}50%{opacity:1;r:3.2}}
+.ring-connectors .ring-pulse-bead{fill:#eafeff;filter:drop-shadow(0 0 8px #eafeff) drop-shadow(0 0 16px rgba(var(--signal),.9))}
+
+/* Registered so --panel-top/--panel-diameter can actually transition
+   smoothly (a plain custom property can't interpolate) — App.tsx computes
+   both per-camera every render from the real measured stage height and
+   the current camera count (see the ringStageHeight comment there), so
+   panels never overlap regardless of how many are open, and resizing
+   between counts animates instead of snapping. --panel-radius (used for
+   the targeting ticks' radial offset) is derived from --panel-diameter
+   via calc(), so it stays in sync automatically without its own
+   registration. */
+@property --panel-top{syntax:'<length>';inherits:true;initial-value:150px}
+@property --panel-diameter{syntax:'<length>';inherits:true;initial-value:220px}
+.ring-panel-layer{position:absolute;inset:0;pointer-events:none;z-index:7}
+.ring-panel{--panel-top:150px;--panel-diameter:220px;--panel-radius:calc(var(--panel-diameter) / 2);position:fixed;top:var(--panel-top);right:34px;width:var(--panel-diameter);height:var(--panel-diameter);pointer-events:auto;opacity:0;transition:top .5s cubic-bezier(.16,1,.3,1),left .5s cubic-bezier(.16,1,.3,1),right .5s cubic-bezier(.16,1,.3,1),bottom .5s cubic-bezier(.16,1,.3,1),width .5s cubic-bezier(.16,1,.3,1),height .5s cubic-bezier(.16,1,.3,1),opacity .3s ease,--panel-top .5s cubic-bezier(.16,1,.3,1),--panel-diameter .5s cubic-bezier(.16,1,.3,1)}
+.ring-panel.materializing,.ring-panel.live,.ring-panel.derezzing{opacity:1}
+.ring-panel.expanded{--panel-radius:210px;top:14%;right:280px;width:420px;height:420px;z-index:16}
+
+/* the circle draws itself in (stroke-dashoffset around the circumference,
+   like the skull's own dashed ring) before the glass fills */
+.ring-sketch{position:absolute;inset:0;opacity:0;pointer-events:none}
+.ring-sketch circle{fill:none;stroke:#eafeff;stroke-width:1.5;filter:drop-shadow(0 0 6px #eafeff);transform-origin:50% 50%;transform:rotate(-90deg)}
+.ring-panel.materializing .ring-sketch{animation:ring-fade-in .15s linear forwards .48s}
+.ring-panel.materializing .ring-sketch circle{stroke-dasharray:721;stroke-dashoffset:721;animation:ring-sketch-draw .45s cubic-bezier(.3,.1,.2,1) forwards .48s}
+@keyframes ring-sketch-draw{to{stroke-dashoffset:0}}
+
+.ring-panel-frame{position:relative;width:100%;height:100%;border-radius:50%;background:rgba(1,10,13,.9);border:1px solid rgba(var(--signal),.5);backdrop-filter:blur(2px);box-shadow:0 22px 60px rgba(0,0,0,.6),0 0 55px rgba(var(--signal),.18);overflow:hidden;opacity:0;transform:scale(.9);transition:box-shadow .3s ease}
+.ring-panel.materializing .ring-panel-frame{animation:ring-frame-in .5s cubic-bezier(.16,1,.3,1) forwards .88s,ring-frame-flash .55s ease-out .98s}
+.ring-panel.live .ring-panel-frame,.ring-panel.derezzing .ring-panel-frame{opacity:1;transform:scale(1)}
+@keyframes ring-frame-in{to{opacity:1;transform:scale(1)}}
+@keyframes ring-frame-flash{0%{box-shadow:0 22px 60px rgba(0,0,0,.6),0 0 55px rgba(var(--signal),.18),inset 0 0 0 6px rgba(234,254,255,0)}28%{box-shadow:0 22px 60px rgba(0,0,0,.6),0 0 130px rgba(var(--signal),.85),inset 0 0 34px 4px rgba(234,254,255,.6)}100%{box-shadow:0 22px 60px rgba(0,0,0,.6),0 0 55px rgba(var(--signal),.18),inset 0 0 0 6px rgba(234,254,255,0)}}
+.ring-panel.derezzing .ring-panel-frame{animation:ring-frame-power-down .4s ease-in forwards}
+@keyframes ring-frame-power-down{0%{opacity:1;transform:scale(1)}15%{opacity:.4;transform:scale(1.01)}30%{opacity:.9;transform:scale(.99)}100%{opacity:0;transform:scale(.6)}}
+
+.ring-rgb-flicker{position:absolute;inset:0;border-radius:50%;pointer-events:none;opacity:0;mix-blend-mode:screen}
+.ring-panel.materializing .ring-rgb-flicker{animation:ring-rgb-flick .18s steps(2) .88s}
+@keyframes ring-rgb-flick{0%{opacity:.5;box-shadow:2px 0 0 rgba(255,60,90,.5) inset,-2px 0 0 rgba(70,232,255,.5) inset}100%{opacity:0}}
+
+/* targeting ticks around the circumference — a scope-reticle language
+   that fits a round target, replacing corner brackets. 8 ticks, evenly
+   spaced, positioned via inline transform in App.tsx (radius must track
+   the panel's own size for expanded vs collapsed). */
+.ring-tick{position:absolute;left:50%;top:50%;width:2px;height:9px;background:#eafeff;box-shadow:0 0 6px #eafeff;opacity:0}
+.ring-panel.materializing .ring-tick{animation:ring-tick-snap .4s cubic-bezier(.2,1.4,.4,1) forwards 1.04s}
+.ring-panel.live .ring-tick{opacity:.9}
+.ring-panel.derezzing .ring-tick{animation:ring-tick-snap .16s ease-in reverse forwards}
+@keyframes ring-tick-snap{0%{opacity:0;height:2px}60%{opacity:1;height:13px}100%{opacity:.9;height:9px}}
+
+/* controls live in a floating pill caption below the circle instead of a
+   header bar, since a circle has no natural top edge for one */
+.ring-caption{position:absolute;left:50%;bottom:-40px;transform:translateX(-50%);display:flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid rgba(var(--signal),.35);border-radius:999px;background:rgba(1,10,13,.92);white-space:nowrap;font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.06em;color:var(--signal-solid);opacity:0;box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:auto}
+.ring-panel.materializing .ring-caption,.ring-panel.live .ring-caption{animation:ring-caption-in .3s ease-out forwards 1.12s}
+.ring-panel.derezzing .ring-caption{animation:ring-fade-out .18s ease-in forwards}
+@keyframes ring-caption-in{from{opacity:0;transform:translateX(-50%) translateY(-4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes ring-fade-in{to{opacity:1}}
+@keyframes ring-fade-out{to{opacity:0}}
+.ring-caption b{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring-status{color:#8fc4c7;font-size:7px}
+.ring-rec-dot{width:5px;height:5px;border-radius:50%;background:#ff4a6e;box-shadow:0 0 6px #ff4a6e;animation:ring-blink 1.6s ease-in-out infinite;flex:0 0 auto}
+@keyframes ring-blink{50%{opacity:.25}}
+.ring-caption button{background:none;border:none;color:#8fc4c7;cursor:pointer;font-size:12px;line-height:1;padding:1px 2px;flex:0 0 auto}
+.ring-caption button:hover{color:#eafeff}
+
+.ring-panel .camera-stage{position:absolute;inset:0;border-radius:50%;overflow:hidden;opacity:0}
+.ring-panel.materializing .camera-stage,.ring-panel.live .camera-stage{animation:ring-fade-in .35s ease-out forwards 1.22s}
+.ring-panel.derezzing .camera-stage{animation:ring-fade-out .15s ease-in forwards}
+.ring-panel .camera-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.ring-scan-sweep{position:absolute;left:0;right:0;height:44%;top:-48%;background:linear-gradient(180deg,transparent,rgba(var(--signal),.55),rgba(234,254,255,.25),rgba(var(--signal),.55),transparent);pointer-events:none;opacity:0}
+.ring-panel.materializing .ring-scan-sweep{animation:ring-sweep .75s cubic-bezier(.3,.1,.2,1) forwards .97s}
+@keyframes ring-sweep{0%{top:-48%;opacity:1}88%{opacity:1}100%{top:100%;opacity:0}}
+.ring-panel .ring-tile-fault{position:absolute;left:50%;bottom:-84px;transform:translateX(-50%);width:150px;padding:5px 8px;border-radius:8px;background:rgba(255,107,107,.16);border:1px solid rgba(255,107,107,.4);color:#ffb3b3;font-size:9px;line-height:1.35;text-align:center;pointer-events:none}
+.ring-panel .ring-tile-fault+.ring-tile-fault{bottom:-122px}
+@media(prefers-reduced-motion:reduce){.ring-panel,.ring-panel-frame,.ring-tick,.ring-caption,.ring-panel .camera-stage,.ring-scan-sweep,.ring-sketch,.ring-rgb-flicker,.ring-connectors .ring-strand{animation:none!important;transition-duration:.001ms!important}.ring-panel-frame{opacity:1!important;transform:scale(1)!important}.ring-tick{opacity:.9!important}.ring-caption,.ring-panel .camera-stage{opacity:1!important}}
+.ring-tile-fault{position:absolute;left:8px;right:8px;bottom:8px;padding:6px 8px;background:rgba(255,107,107,.14);border:1px solid rgba(255,107,107,.4);color:#ffb3b3;font-size:10px;line-height:1.4}
+.ring-talk-button.talking{color:var(--signal-solid);background:rgba(var(--signal),.24);border-radius:3px}
+.camera-sidebar{flex:0 0 200px;width:200px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:12px;border-left:1px solid rgba(var(--signal),.18);background:rgba(1,13,14,.94)}
+.camera-stats{display:grid;gap:8px}
+.camera-stats>div{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:1px solid rgba(var(--signal),.12);background:rgba(var(--signal),.03)}
+.camera-stats>div>span{color:#618b8a;font:400 7px "Cascadia Mono",monospace;letter-spacing:.1em}
+.camera-stats>div>b{color:var(--signal-solid);font:500 9px "Cascadia Mono",monospace;letter-spacing:.04em}
+.camera-controls-panel.compact{margin-top:0;border:none;background:none}
+.camera-controls-panel.compact>header{padding:0 0 8px}
+.camera-controls-panel.compact .camera-controls-grid{padding:0}
+.camera-controls-panel.compact .camera-controls-empty{padding:0;font-size:10px}
+@media(max-width:1100px){.camera-sidebar{flex-basis:160px;width:160px}}
+.camera-controls-panel{margin-top:16px;border:1px solid rgba(var(--signal),.22);background:linear-gradient(145deg,rgba(var(--signal),.045),rgba(0,0,0,.2))}
+.camera-controls-panel>header{display:flex;justify-content:space-between;align-items:center;padding:10px 13px;border-bottom:1px solid rgba(var(--signal),.14);font:500 7px "Cascadia Mono",monospace;letter-spacing:.15em;color:#638b8f}
+.camera-controls-panel>header b{color:#64ffb1;font-weight:500}
+.camera-controls-empty{margin:0;padding:14px;color:#618b8a;font-size:11px;line-height:1.5}
+.camera-controls-grid{display:grid;gap:14px;padding:13px}
+.camera-control{display:grid;gap:6px}
+.camera-control-head{display:flex;justify-content:space-between;align-items:center}
+.camera-control-head b{color:#bfe2e4;font:500 8px "Cascadia Mono",monospace;letter-spacing:.08em}
+.camera-control-head button{border:1px solid rgba(var(--signal),.28);background:transparent;color:#7ca9a6;font:500 7px "Cascadia Mono",monospace;letter-spacing:.1em;padding:3px 8px;cursor:pointer}
+.camera-control-head button.active{border-color:var(--signal-solid);color:var(--signal-solid);background:rgba(var(--signal),.1)}
+.camera-control input[type=range]{width:100%;accent-color:var(--signal-solid)}
+.camera-control>span{color:#60868b;font-size:9px;letter-spacing:.04em}
+.permission-category{margin-top:16px}
+.permission-category>header{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.permission-category>header>b{color:#64ffb1;font:500 8px "Cascadia Mono",monospace;letter-spacing:.15em}
+.permission-category>header>span{color:#6a9294;font-size:10px}
+.guided-save-error{color:#ff8095;border-left:2px solid #ff304e;padding-left:9px}
+.connector-message.fault{margin-top:10px;border-color:rgba(255,176,42,.4);background:rgba(255,176,42,.08);color:#ffcf8a;line-height:1.5}
+.voice-enrollment-script{margin:10px 0;padding:12px 14px;border:1px solid rgba(var(--signal),.28);background:rgba(var(--signal),.045)}
+.voice-enrollment-script>b{display:block;margin-bottom:6px;color:var(--signal-solid);font:500 8px "Cascadia Mono",monospace;letter-spacing:.15em}
+.voice-enrollment-script>p{margin:0;color:#dffaf5;font:500 15px/1.5 Rajdhani,sans-serif;letter-spacing:.02em}

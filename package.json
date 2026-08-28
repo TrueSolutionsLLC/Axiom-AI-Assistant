@@ -1,0 +1,124 @@
+{
+  "name": "axiom-assistant",
+  "version": "3.20.4",
+  "private": true,
+  "description": "Clean-room Windows AI companion (working title)",
+  "main": "dist-main/main/main.js",
+  "author": "Robbie",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "npm run build:main && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build:main": "tsc -p tsconfig.main.json",
+    "typecheck:renderer": "tsc -p tsconfig.json --noEmit",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run typecheck:renderer && npm run build:renderer",
+    "start": "npm run build && electron .",
+    "test": "vitest run --config vitest.config.ts",
+    "qa:speaking": "node scripts/speaking-video-qa.js",
+    "test:watch": "vitest --config vitest.config.ts",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "icon:mac": "node scripts/create-macos-icon.js",
+    "verify:mac": "node scripts/mac-native-release.mjs --verify-only",
+    "package:mac-source": "node scripts/package-mac-source.mjs",
+    "acceptance": "npm run build && node scripts/acceptance/run.mjs",
+    "acceptance:seed": "node scripts/acceptance/seed-profile.mjs",
+    "publish:update-manifest": "node scripts/publish-update-manifest.mjs",
+    "release:mac:native": "node scripts/mac-native-release.mjs",
+    "dist:mac": "npm run icon:mac && npm run build && electron-builder --mac dmg --arm64",
+    "dist:mac:universal": "npm run icon:mac && npm run build && electron-builder --mac dmg --universal"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "systeminformation": "^5.33.1",
+    "ws": "^8.21.3"
+  },
+  "optionalDependencies": {
+    "@microsoft/winappcli": "^0.6.2"
+  },
+  "overrides": {
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.180.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "6.0.5",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "playwright": "^1.58.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.180.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "wait-on": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.robbie.axiom",
+    "productName": "Axiom",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@microsoft/winappcli/bin/win-x64/**/*",
+      "node_modules/onnxruntime-node/bin/**/*"
+    ],
+    "files": [
+      "dist-main/**/*",
+      "dist-renderer/**/*",
+      "build/axiom-icon.png",
+      "package.json",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**/*",
+      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/x64/**/*",
+      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "icon": "build/axiom.ico",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Axiom-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "icon": "build/axiom.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Axiom-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Axiom uses the camera only for on-device presence, gaze, and head tracking when enabled.",
+        "NSMicrophoneUsageDescription": "Axiom uses the microphone for hands-free conversation when enabled.",
+        "NSAudioCaptureUsageDescription": "Axiom captures microphone audio only for user-authorized conversation and local speaker verification.",
+        "NSScreenCaptureDescription": "Axiom captures the display only when you explicitly request screen understanding.",
+        "NSAppleEventsUsageDescription": "Axiom uses Automation only for computer-control actions you explicitly authorize."
+      }
+    },
+    "nsis": {
+      "installerIcon": "build/axiom.ico",
+      "uninstallerIcon": "build/axiom.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
