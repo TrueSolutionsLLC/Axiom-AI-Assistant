@@ -111,7 +111,22 @@ async function listWindowsShortcuts(): Promise<InstalledApp[]> {
     }
   };
   for (const directory of directories) await walk(directory);
-  return found;
+  // A live user hit this exact case: Chrome's installer left a "Google
+  // Chrome.lnk" in both the shared Public Desktop and the all-users Start
+  // Menu — two of these four directories, not a shortcut-vs-Start-Apps
+  // collision (that's deduplicated separately, below). Two shortcuts with
+  // the identical display name can never be told apart in the "which one
+  // did you mean?" error either, since it only shows the name — so this
+  // is never a real ambiguity to ask about, just the same app found twice.
+  // First occurrence wins, in the order `directories` is listed above:
+  // the user's own Desktop takes priority over the shared/system copies.
+  const seenNames = new Set<string>();
+  return found.filter((item) => {
+    const key = item.name.toLowerCase();
+    if (seenNames.has(key)) return false;
+    seenNames.add(key);
+    return true;
+  });
 }
 
 // UWP/Microsoft Store apps (Calculator on newer Windows builds, Xbox,

@@ -245,6 +245,39 @@ describe('latency-aware tool routing', () => {
     });
   });
 
+  // A live user asked to open Google Chrome and hit a spurious "More than
+  // one application matches: Google Chrome, Google Chrome" — real, distinct
+  // shortcut files (Chrome's installer had left one on the shared Public
+  // Desktop and one in the all-users Start Menu), both with the identical
+  // display name. Reproduced against real fixture files in the two shortcut
+  // folders that are purely env-var-driven (APPDATA/ProgramData), so this
+  // doesn't touch the real Desktop or os.homedir() other tests here rely on.
+  it.skipIf(process.platform!=='win32')('never asks "which one" for two shortcuts with the identical name, real Windows-specific bug', async () => {
+    const previousAppData = process.env.APPDATA, previousProgramData = process.env.ProgramData;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'axiom-shortcut-dup-'));
+    const appDataPrograms = path.join(root, 'appdata', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+    const programDataPrograms = path.join(root, 'programdata', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+    try {
+      await fs.mkdir(appDataPrograms, { recursive: true });
+      await fs.mkdir(programDataPrograms, { recursive: true });
+      await fs.writeFile(path.join(appDataPrograms, 'Totally Unique App.lnk'), '');
+      await fs.writeFile(path.join(programDataPrograms, 'Totally Unique App.lnk'), '');
+      process.env.APPDATA = path.join(root, 'appdata');
+      process.env.ProgramData = path.join(root, 'programdata');
+      // The fixture .lnk files are empty (not real shortcuts), so the actual
+      // launch attempt genuinely fails — that's expected and not what this
+      // test is checking. Only the *reason* it failed matters: it must not
+      // be the ambiguity error, which is what listWindowsShortcuts() used to
+      // produce for these exact two files before deduplication was added.
+      const result = await executeTool('open_application', { application: 'Totally Unique App' });
+      expect(result.event.summary).not.toMatch(/more than one|which one did you mean/i);
+    } finally {
+      if (previousAppData === undefined) delete process.env.APPDATA; else process.env.APPDATA = previousAppData;
+      if (previousProgramData === undefined) delete process.env.ProgramData; else process.env.ProgramData = previousProgramData;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('selects browser tools for a bare domain with no "website"/"url" wording', () => {
     // "Open google.com" has no literal website/url/https token — was
     // previously missed entirely.
