@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { anthropicToolsForTest, finalizeReplyTone, geminiToolsForTest, identityAndMemoryContextForTest, liveResearchToolNameForTest, normalizeActionReply, recentTranscriptForTest, responseTextForTest, runAssistant, soleToolNameForTest, transcriptTextForTest, userContentForTest } from './openai';
+import { describe, expect, it, vi } from 'vitest';
+import { anthropicRequestStreamingForTest, anthropicToolsForTest, finalizeReplyTone, geminiRequestStreamingForTest, geminiToolsForTest, identityAndMemoryContextForTest, liveResearchToolNameForTest, normalizeActionReply, recentTranscriptForTest, responseTextForTest, runAssistant, soleToolNameForTest, transcriptTextForTest, userContentForTest } from './openai';
 import type { ApprovalRequest } from '../shared/contracts';
 import type { AppStore } from './store';
 
@@ -218,5 +218,88 @@ describe('screen vision input', () => {
 
   it('rejects non-image attachment data', () => {
     expect(() => userContentForTest('Inspect this.', 'data:text/html;base64,AAAA')).toThrow(/invalid or too large/i);
+  });
+});
+
+// Anthropic/Gemini replies used to silently buffer their entire response
+// before showing anything — streaming was never implemented for either
+// provider, only for OpenAI. These exercise the new SSE parsers directly
+// against real-shaped payloads (not the full runAnthropic/runGemini path,
+// which every existing test above short-circuits with an empty API key
+// before ever reaching a real fetch call).
+function sseResponse(chunks: string[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+describe('Anthropic streaming parser', () => {
+  it('streams text deltas live and assembles the final text block', async () => {
+    const events = [
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ];
+    // Split mid-event across two fetched chunks to prove the buffer-across-
+    // reads logic (not just whole-event-per-chunk) actually works.
+    const stitched = events.join('');
+    const half = Math.floor(stitched.length / 2);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([stitched.slice(0, half), stitched.slice(half)])));
+    const deltas: string[] = [];
+    const result = await anthropicRequestStreamingForTest('key', { model: 'claude-sonnet-5', messages: [] }, (delta) => deltas.push(delta));
+    vi.unstubAllGlobals();
+    expect(deltas.join('')).toBe('Hello world');
+    expect(result.content).toEqual([{ type: 'text', text: 'Hello world', id: undefined, name: undefined, input: undefined }]);
+  });
+
+  it('assembles a tool call\'s fragmented JSON arguments only once the block closes', async () => {
+    const events = [
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"get_local_time"}}\n\n',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"a\\":"}}\n\n',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"1}"}}\n\n',
+      'data: {"type":"content_block_stop","index":0}\n\n',
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(events)));
+    const result = await anthropicRequestStreamingForTest('key', { model: 'claude-sonnet-5', messages: [] }, () => {});
+    vi.unstubAllGlobals();
+    expect(result.content).toEqual([{ type: 'tool_use', id: 'toolu_1', name: 'get_local_time', text: undefined, input: { a: 1 } }]);
+  });
+
+  it('throws on a mid-stream error event instead of returning a partial reply silently', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(['data: {"type":"error","error":{"message":"overloaded"}}\n\n'])));
+    await expect(anthropicRequestStreamingForTest('key', { model: 'claude-sonnet-5', messages: [] }, () => {})).rejects.toThrow(/overloaded/);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Gemini streaming parser', () => {
+  it('streams text chunks live and concatenates them into one final part', async () => {
+    const events = [
+      'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Hello"}]}}]}\n\n',
+      'data: {"candidates":[{"content":{"role":"model","parts":[{"text":" world"}]}}]}\n\n',
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(events)));
+    const deltas: string[] = [];
+    const result = await geminiRequestStreamingForTest('key', 'gemini-3.6-flash', { contents: [] }, (delta) => deltas.push(delta));
+    vi.unstubAllGlobals();
+    expect(deltas.join('')).toBe('Hello world');
+    expect(result.candidates?.[0]?.content?.parts).toEqual([{ text: 'Hello world' }]);
+  });
+
+  it('keeps a function call as its own whole part, not merged with surrounding text', async () => {
+    const events = [
+      'data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"get_local_time","args":{}}}]}}]}\n\n',
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(events)));
+    const result = await geminiRequestStreamingForTest('key', 'gemini-3.6-flash', { contents: [] }, () => {});
+    vi.unstubAllGlobals();
+    expect(result.candidates?.[0]?.content?.parts).toEqual([{ functionCall: { name: 'get_local_time', args: {} } }]);
   });
 });

@@ -272,6 +272,54 @@ async function anthropicRequest(key: string, body: Record<string, unknown>): Pro
   return data;
 }
 
+// Anthropic's real Messages API streams the same way OpenAI's does — this
+// had simply never been implemented, so every Anthropic reply silently
+// waited for the entire response before showing anything, regardless of
+// how long it took to generate. Text arrives as content_block_delta events
+// (type:'text_delta'); a tool call's arguments arrive as a JSON string
+// split across input_json_delta events and are only valid once assembled
+// at content_block_stop — never parsed mid-stream.
+async function anthropicRequestStreaming(key: string, body: Record<string, unknown>, onDelta: (delta: string) => void): Promise<AnthropicResponse> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'}, body:JSON.stringify({...body,stream:true}),signal:AbortSignal.timeout(90_000) });
+  if (!response.ok) { const data=await response.json() as AnthropicResponse; throw new Error(data.error?.message||`Anthropic request failed (${response.status})`); }
+  if (!response.body) throw new Error('Anthropic returned no response stream.');
+  const reader=response.body.getReader(),decoder=new TextDecoder();
+  let buffer='';
+  const blocks: AnthropicBlock[] = [];
+  const partialJson: Record<number,string> = {};
+  while(true){
+    const {done,value}=await reader.read(); if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    const events=buffer.split('\n\n'); buffer=events.pop()||'';
+    for(const event of events){
+      const dataLine=event.split('\n').find((line)=>line.startsWith('data:'));
+      if(!dataLine)continue;
+      const raw=dataLine.slice(5).trim(); if(!raw)continue;
+      let item: { type?:string; index?:number; content_block?:{type?:string;id?:string;name?:string}; delta?:{type?:string;text?:string;partial_json?:string}; error?:{message?:string} };
+      try { item = JSON.parse(raw); } catch { continue; }
+      if(item.type==='error') throw new Error(item.error?.message||'Anthropic stream failed.');
+      if(item.type==='content_block_start'&&typeof item.index==='number'){
+        const kind=item.content_block?.type;
+        blocks[item.index]={type:kind,text:kind==='text'?'':undefined,id:item.content_block?.id,name:item.content_block?.name,input:kind==='tool_use'?{}:undefined};
+        if(kind==='tool_use')partialJson[item.index]='';
+      }
+      if(item.type==='content_block_delta'&&typeof item.index==='number'){
+        if(item.delta?.type==='text_delta'&&item.delta.text){
+          const block=blocks[item.index]??={type:'text',text:''};
+          block.text=(block.text??'')+item.delta.text;
+          onDelta(item.delta.text);
+        }
+        if(item.delta?.type==='input_json_delta'&&typeof item.delta.partial_json==='string')partialJson[item.index]=(partialJson[item.index]??'')+item.delta.partial_json;
+      }
+      if(item.type==='content_block_stop'&&typeof item.index==='number'){
+        const block=blocks[item.index];
+        if(block?.type==='tool_use'){try{block.input=partialJson[item.index]?JSON.parse(partialJson[item.index]):{};}catch{block.input={};}}
+      }
+    }
+  }
+  return { content: blocks.filter(Boolean) };
+}
+
 async function runAnthropic(key: string, model: string, input: AssistantRequest, store?: AppStore, onDelta: (delta: string) => void = () => {},preflight?:VerifiedPreflight): Promise<AssistantReply> {
   if (!key) throw new Error('Add an Anthropic API key in Settings.');
   const transcript=recentTranscript(input);
@@ -282,14 +330,21 @@ async function runAnthropic(key: string, model: string, input: AssistantRequest,
   const image=imagePayload(input.imageDataUrl);const firstContent=image?[{type:'text',text:first},{type:'image',source:{type:'base64',media_type:image.mediaType,data:image.data}}]:first;
   const messages:Array<Record<string,unknown>>=[{role:'user',content:firstContent}];
   const forceTool=mandatoryTool?(researchTool||soleToolName(toolDefinitions)):undefined;
-  const system=`${await instructionsFor(store,input)}${capabilityInstructions(mandatoryTool,liveResearch)}`;let response=await anthropicRequest(key,{model,max_tokens:6000,system,messages,...(tools.length?{tools}: {}),...(forceTool?{tool_choice:{type:'tool',name:forceTool}}:mandatoryTool?{tool_choice:{type:'any'}}:{})});
+  const system=`${await instructionsFor(store,input)}${capabilityInstructions(mandatoryTool,liveResearch)}`;
+  // Same principle already proven for OpenAI: only the first round can have
+  // tool_choice forced, and a forced round may interleave stray preamble
+  // text with the tool call, so it's buffered rather than shown live. Every
+  // round after that lets the model choose freely, so its text is the real
+  // final answer and streams to the user as it's generated.
+  let buffered='';const bufferedEmit=(delta:string)=>{buffered+=delta;};
+  let response=await anthropicRequestStreaming(key,{model,max_tokens:6000,system,messages,...(tools.length?{tools}: {}),...(forceTool?{tool_choice:{type:'tool',name:forceTool}}:mandatoryTool?{tool_choice:{type:'any'}}:{})},mandatoryTool?bufferedEmit:onDelta);
   for(let round=0;round<16;round+=1){
     const calls=(response.content??[]).filter((part)=>part.type==='tool_use'&&part.id&&part.name);
     if(!calls.length)break;
     const results=[];
     for(const call of calls){const result=await executeTool(call.name!,call.input??{},store,input.message);toolEvents.push(result.event);results.push({type:'tool_result',tool_use_id:call.id,content:result.output});}
     messages.push({role:'assistant',content:response.content??[]},{role:'user',content:results});
-    response=await anthropicRequest(key,{model,max_tokens:6000,system,messages,...(tools.length?{tools}: {})});
+    response=await anthropicRequestStreaming(key,{model,max_tokens:6000,system,messages,...(tools.length?{tools}: {})},onDelta);
   }
   const text=(response.content??[]).filter((part)=>part.type==='text'&&part.text).map((part)=>part.text).join('\n').trim();
   // See the matching comment in runOpenAI above: only block a search that
@@ -299,7 +354,8 @@ async function runAnthropic(key: string, model: string, input: AssistantRequest,
   const searchEvent=toolEvents.find((event)=>LIVE_RESEARCH_TOOLS.has(event.name));
   if(liveResearch&&!searchEvent)throw new Error('The required live web search was never attempted.');
   if(mandatoryTool&&!toolEvents.length)throw new Error('Anthropic did not execute the required Axiom capability.');
-  const normalized=normalizeActionReply(text,toolEvents,mandatoryTool);const finalized=finalizeReplyTone(normalized,toolEvents);onDelta(finalized.text); return {text:finalized.text,provider:'anthropic',model,toolEvents,tone:finalized.tone};
+  if(buffered)onDelta(buffered);
+  const normalized=normalizeActionReply(text,toolEvents,mandatoryTool);const finalized=finalizeReplyTone(normalized,toolEvents);return {text:finalized.text,provider:'anthropic',model,toolEvents,tone:finalized.tone};
 }
 
 interface GeminiPart { text?: string; functionCall?: { name?: string; args?: Record<string, unknown> } }
@@ -321,6 +377,52 @@ async function geminiRequest(key:string,model:string,body:Record<string,unknown>
   const data=await response.json() as GeminiResponse;if(!response.ok)throw new Error(data.error?.message||`Gemini request failed (${response.status})`);return data;
 }
 
+// Gemini's streamGenerateContent (alt=sse) sends a sequence of complete
+// GenerateContentResponse fragments rather than character-level deltas like
+// OpenAI/Anthropic — each SSE "data:" line is a full JSON object whose
+// text parts are the newly-generated increment for that step. Unlike
+// Anthropic's tool-call arguments, Gemini does not fragment a functionCall
+// across multiple chunks — it arrives whole in a single part, so it's
+// taken as-is rather than accumulated like the text parts are.
+async function geminiRequestStreaming(key:string,model:string,body:Record<string,unknown>,onDelta:(delta:string)=>void):Promise<GeminiResponse>{
+  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify(body),signal:AbortSignal.timeout(90_000)});
+  if(!response.ok){const data=await response.json() as GeminiResponse;throw new Error(data.error?.message||`Gemini request failed (${response.status})`);}
+  if(!response.body)throw new Error('Gemini returned no response stream.');
+  const reader=response.body.getReader(),decoder=new TextDecoder();
+  let buffer='';
+  const parts: GeminiPart[] = [];
+  let groundingMetadata: { webSearchQueries?: string[]; groundingChunks?: unknown[] } | undefined;
+  while(true){
+    const {done,value}=await reader.read(); if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    const events=buffer.split('\n\n'); buffer=events.pop()||'';
+    for(const event of events){
+      const dataLine=event.split('\n').find((line)=>line.startsWith('data:'));
+      if(!dataLine)continue;
+      const raw=dataLine.slice(5).trim(); if(!raw)continue;
+      let chunk: GeminiResponse;
+      try { chunk = JSON.parse(raw); } catch { continue; }
+      if(chunk.error)throw new Error(chunk.error.message||'Gemini stream failed.');
+      const candidate=chunk.candidates?.[0];
+      if(candidate?.groundingMetadata)groundingMetadata=candidate.groundingMetadata;
+      for(const part of candidate?.content?.parts??[]){
+        if(part.text){
+          const last=parts[parts.length-1];
+          // Consecutive plain-text chunks concatenate into one running part
+          // so the final .content.parts shape matches the non-streaming
+          // response exactly; a functionCall always starts its own part.
+          if(last&&last.text!==undefined&&!last.functionCall)last.text+=part.text;
+          else parts.push({text:part.text});
+          onDelta(part.text);
+        } else if(part.functionCall){
+          parts.push({functionCall:part.functionCall});
+        }
+      }
+    }
+  }
+  return { candidates: [{ content:{role:'model',parts}, ...(groundingMetadata?{groundingMetadata}:{}) }] };
+}
+
 async function runGemini(key:string,model:string,input:AssistantRequest,store?:AppStore,onDelta:(delta:string)=>void=()=>{},preflight?:VerifiedPreflight):Promise<AssistantReply>{
   if(!key)throw new Error('Add a Google Gemini API key in Settings.');
   const transcript=recentTranscript(input);
@@ -330,12 +432,18 @@ async function runGemini(key:string,model:string,input:AssistantRequest,store?:A
   const image=imagePayload(input.imageDataUrl);const firstParts:Array<Record<string,unknown>>=[{text:`${transcript?`Conversation so far:\n${transcript}\n\n`:''}User: ${input.message}${preflightContext(preflight)}`}];if(image)firstParts.push({inlineData:{mimeType:image.mediaType,data:image.data}});
   const contents:Array<Record<string,unknown>>=[{role:'user',parts:firstParts}];
   const forceTool=mandatoryTool?(researchTool||soleToolName(toolDefinitions)):undefined;
-  const system=`${await instructionsFor(store,input)}${capabilityInstructions(mandatoryTool,liveResearch)}`;const forceFunctions=mandatoryTool&&toolDefinitions.some((tool)=>tool.type==='function');let response=await geminiRequest(key,model,{systemInstruction:{parts:[{text:system}]},contents,...(tools.length?{tools}: {}),...(forceTool?{toolConfig:{functionCallingConfig:{mode:'ANY',allowedFunctionNames:[forceTool]}}}:forceFunctions?{toolConfig:{functionCallingConfig:{mode:'ANY'}}}:{})});
+  const system=`${await instructionsFor(store,input)}${capabilityInstructions(mandatoryTool,liveResearch)}`;const forceFunctions=mandatoryTool&&toolDefinitions.some((tool)=>tool.type==='function');
+  // Same principle as OpenAI/Anthropic: only the first round can have
+  // function-calling forced to ANY, and a forced round may interleave
+  // stray preamble text with the call, so it's buffered rather than shown
+  // live. Every round after that streams to the user as it's generated.
+  let buffered='';const bufferedEmit=(delta:string)=>{buffered+=delta;};
+  let response=await geminiRequestStreaming(key,model,{systemInstruction:{parts:[{text:system}]},contents,...(tools.length?{tools}: {}),...(forceTool?{toolConfig:{functionCallingConfig:{mode:'ANY',allowedFunctionNames:[forceTool]}}}:forceFunctions?{toolConfig:{functionCallingConfig:{mode:'ANY'}}}:{})},mandatoryTool?bufferedEmit:onDelta);
   for(let round=0;round<16;round+=1){
     const modelContent=response.candidates?.[0]?.content;const calls=(modelContent?.parts??[]).filter((part)=>part.functionCall?.name);
     if(!calls.length)break;if(modelContent)contents.push({role:'model',parts:modelContent.parts});
     const parts=[];for(const call of calls){const fn=call.functionCall!;const result=await executeTool(fn.name!,fn.args??{},store,input.message);toolEvents.push(result.event);parts.push({functionResponse:{name:fn.name,response:{result:result.output}}});}
-    contents.push({role:'user',parts});response=await geminiRequest(key,model,{systemInstruction:{parts:[{text:system}]},contents,...(tools.length?{tools}: {})});
+    contents.push({role:'user',parts});response=await geminiRequestStreaming(key,model,{systemInstruction:{parts:[{text:system}]},contents,...(tools.length?{tools}: {})},onDelta);
   }
   const text=(response.candidates?.[0]?.content?.parts??[]).map((part)=>part.text??'').join('\n').trim();
   // See the matching comment in runOpenAI above: only block a search that
@@ -343,7 +451,8 @@ async function runGemini(key:string,model:string,input:AssistantRequest,store?:A
   const searchEvent=toolEvents.find((event)=>LIVE_RESEARCH_TOOLS.has(event.name));
   if(liveResearch&&!searchEvent)throw new Error('The required live web search was never attempted.');
   if(mandatoryTool&&!toolEvents.length)throw new Error('Gemini did not execute the required Axiom capability.');
-  const normalized=normalizeActionReply(text,toolEvents,mandatoryTool);const finalized=finalizeReplyTone(normalized,toolEvents);onDelta(finalized.text);return{text:finalized.text,provider:'gemini',model,toolEvents,tone:finalized.tone};
+  if(buffered)onDelta(buffered);
+  const normalized=normalizeActionReply(text,toolEvents,mandatoryTool);const finalized=finalizeReplyTone(normalized,toolEvents);return{text:finalized.text,provider:'gemini',model,toolEvents,tone:finalized.tone};
 }
 
 export async function runAssistant(key:string,provider:AIProvider,model:string,input:AssistantRequest,store?:AppStore,onDelta:(delta:string)=>void=()=>{}):Promise<AssistantReply>{
@@ -385,3 +494,5 @@ export const transcriptTextForTest = transcriptText;
 export const recentTranscriptForTest = recentTranscript;
 export const liveResearchToolNameForTest = liveResearchToolName;
 export const soleToolNameForTest = soleToolName;
+export const anthropicRequestStreamingForTest = anthropicRequestStreaming;
+export const geminiRequestStreamingForTest = geminiRequestStreaming;

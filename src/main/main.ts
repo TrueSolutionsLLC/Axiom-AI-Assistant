@@ -32,6 +32,19 @@ const ringSessions=new RingLiveViewSessions(()=>connectors.ringTicket(),(event)=
 const mediaService=new MediaService(store);
 const reliability=new ReliabilityFabric();
 let mainWindow: BrowserWindow | null = null;
+
+// Keyword-gated tool offering (see providerTools() in tools.ts) will always
+// have a long tail of real phrasings a hand-written regex never anticipated
+// — every fix so far (web search, folder creation, Homebridge, desktop
+// control...) was found this same way: a live user hit a phrase, it didn't
+// match, Axiom said "I can't do that" for something it actually can do, and
+// that failure was invisible until someone happened to notice and report
+// it. Rather than claim this class of bug is now eliminated (it structurally
+// can't be, by a keyword-matching system), every occurrence going forward is
+// logged with the exact message that triggered it — turning a silent,
+// unrecorded gap into a concrete, greppable diagnostic entry the next
+// missing trigger can actually be fixed from.
+const capabilityDenialPattern=/\b(i can'?t (?:do|help with|access|control|open|run|perform|assist with)|i'?m not able to|i am not able to|i don'?t have (?:the ability|access|the capability|a way)|that'?s not something i can|not (?:something )?i(?:'?m| am) able to|i have no way to|i'?m unable to|i am unable to|outside (?:of )?what i can do|not (?:currently )?(?:supported|available) (?:in|from|through) this|i can'?t (?:do that|help with that) (?:here|in this chat|in this conversation))\b/i;
 let tray: Tray | null = null;
 let isQuitting = false;
 const backgroundLaunch = process.argv.includes('--background');
@@ -480,6 +493,7 @@ function registerIpc(): void {
       store.settleRuntimeTask(task.id,outcome.status,outcome.summary,outcome.phase,{blocker:outcome.blocker,nextAction:outcome.nextAction});
       store.appendHistory(message('user', clean), message('assistant', reply.text));
       writeDiagnostic('assistant-send',{latencyMs:Date.now()-sendStarted,toolCount:reply.toolEvents.length,routeCandidates});
+      if(!reply.toolEvents.length&&capabilityDenialPattern.test(reply.text))writeDiagnostic('possible-false-capability-denial',{message:clean,reply:reply.text.slice(0,500),actionExpected,routeCandidates});
       return reply;
     }
     catch(reason){
