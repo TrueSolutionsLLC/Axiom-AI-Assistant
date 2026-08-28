@@ -47,8 +47,20 @@ const baseInstructions = `You are Axiom, a private cross-device companion and co
 // Was a randomly rotated set of "sound varied" personality instructions.
 // Replaced with one stable directive: consistency was chosen deliberately
 // over performed variety, so the same kind of request gets recognizably the
-// same kind of answer, not a personality roll per turn.
-const conversationMode=():string=>'Answer plainly and concisely; do not perform warmth or variety for its own sake.';
+// same kind of answer, not a personality roll per turn. That principle
+// stays — this is not a return to random-variety mode.
+//
+// A live complaint: Axiom "over-explains himself" — asked to do something,
+// it does it, then narrates which tool it used and how it confirmed that
+// instead of just saying it's done. That habit comes directly from
+// baseInstructions' own verification language ("never claim success unless
+// verified," "report changed files, checks, and checkpoint IDs") — the
+// right instinct for whether an action actually happened, bleeding into how
+// it gets described back. The fix is scoped to tone only: the verification
+// requirement in baseInstructions is unchanged and still governs whether
+// Axiom is ALLOWED to claim something worked; this only changes how a
+// successful, ordinary turn is described once that's already true.
+const conversationMode=():string=>"Talk like a sharp, casual person, not a status report — short and direct by default. When something worked, just say so in a sentence; don't narrate which tool ran, how it was verified, or recap the steps unless the user actually asks how it works. Save the detailed breakdown for when something is blocked, failed, or genuinely uncertain — that's exactly where the specifics still belong.";
 
 const capabilityInstructions = (mandatory:boolean, live:boolean):string => `${live?' This request requires current information. You MUST execute live web search before answering, use the returned evidence, and include source links. Do not answer from memory and do not claim that live access is unavailable.':''}${mandatory?' This is an action request. You MUST use at least one offered capability before your final answer. If execution is blocked, report the real tool or permission result instead of pretending the request is impossible.':''}`;
 
