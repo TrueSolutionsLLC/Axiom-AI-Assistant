@@ -414,7 +414,7 @@ export interface TodoItem { id:string; text:string; status:'open'|'completed'; c
 export interface MonitorItem { id:string; title:string; instruction:string; source:'screen'|'camera'; intervalSeconds:number; status:'active'|'triggered'|'stopped'|'failed'; createdAt:string; updatedAt:string; nextRunAt:string; endsAt?:string; lastRunAt?:string; lastObservation?:string; }
 export interface BackgroundEvent { id:string; kind:'agent'|'reminder'|'monitor'|'backup'|'system'; title:string; text:string; createdAt:string; speak:boolean; read:boolean; taskId?:string; }
 export interface SchedulerSnapshot { running:boolean; checkedAt:string; agents:AgentItem[]; agentRuns:AgentRunItem[]; monitors:MonitorItem[]; events:BackgroundEvent[]; nextWakeAt?:string; }
-export type ConnectorId='google'|'shopify'|'meta'|'dropbox'|'homebridge'|'ring';
+export type ConnectorId='google'|'shopify'|'meta'|'dropbox'|'homebridge'|'ring'|'stripe'|'klaviyo'|'whatsapp';
 export interface ConnectorStatus { id:ConnectorId; label:string; configured:boolean; connected:boolean; account:string; endpoint:string; scopes:string[]; expiresAt?:string; lastCheckedAt?:string; lastError?:string; setupHint:string; }
 export interface ConnectorSetup { id:ConnectorId; account?:string; endpoint?:string; clientId?:string; clientSecret?:string; accessToken?:string; refreshToken?:string; expiresAt?:string; scopes?:string[]; clearSecrets?:boolean; }
 export interface HomebridgeAccessory { uniqueId:string;name:string;type:string;serviceName:string;values:Record<string,unknown>; }

@@ -297,6 +297,12 @@ describe('latency-aware tool routing', () => {
     expect(tools.some((tool) => tool.name === 'web_search')).toBe(false);
   });
 
+  it('offers the Stripe, Klaviyo, and WhatsApp connector tools for their real trigger phrases', () => {
+    expect(providerTools('What were my recent Stripe payments?').some((tool) => tool.name === 'stripe_payments')).toBe(true);
+    expect(providerTools('How are my Klaviyo email campaigns doing?').some((tool) => tool.name === 'klaviyo_campaigns')).toBe(true);
+    expect(providerTools('Send a WhatsApp message to the customer').some((tool) => tool.name === 'whatsapp_send_message')).toBe(true);
+  });
+
   it('resolves "create a new folder on the desktop" to exactly one tool', () => {
     // A live user hit this exact request and got "AI providers unavailable:
     // OpenAI did not execute the required Axiom capability" — the bare word

@@ -619,6 +619,15 @@ const registry: ToolDefinition[] = [
     name:'dropbox_list_folder',description:'List files in a connected Dropbox folder without downloading their contents.',parameters:{type:'object',properties:{path:{type:'string'}},additionalProperties:false},permission:{id:'dropbox-read',label:'Listed connected Dropbox files',risk:'sensitive',enabled:true},async execute(args,store){if(!store)throw new Error('Connector store unavailable.');return{output:JSON.stringify(await new ConnectorClient(store).dropboxList(String(args.path||'')))};},
   },
   {
+    name:'stripe_payments',description:'Read recent charges from the connected Stripe account (payment amounts, status, customer, currency). Read-only — this tool can never create a charge, refund, or payout.',parameters:{type:'object',properties:{days:{type:'number'}},additionalProperties:false},permission:{id:'stripe-read',label:'Read Stripe payment data',risk:'sensitive',enabled:true},async execute(args,store){if(!store)throw new Error('Connector store unavailable.');return{output:JSON.stringify(await new ConnectorClient(store).stripePayments(Number(args.days)||7))};},
+  },
+  {
+    name:'klaviyo_campaigns',description:'Read recent email campaigns from the connected Klaviyo account (name, status, send time).',parameters:{type:'object',properties:{},additionalProperties:false},permission:{id:'klaviyo-read',label:'Read Klaviyo campaign data',risk:'sensitive',enabled:true},async execute(_args,store){if(!store)throw new Error('Connector store unavailable.');return{output:JSON.stringify(await new ConnectorClient(store).klaviyoCampaigns())};},
+  },
+  {
+    name:'whatsapp_send_message',description:'Send a WhatsApp text message through the connected WhatsApp Business number. Always requires a fresh exact approval before transmission. Meta only allows a free-form message within 24 hours of the recipient\'s last message to this business number — outside that window Meta\'s API itself rejects it and a pre-approved template is required instead; if that happens, tell the user exactly that rather than guessing at a fix.',parameters:{type:'object',properties:{to:{type:'string'},message:{type:'string'}},required:['to','message'],additionalProperties:false},permission:{id:'whatsapp-send',label:'Sent a WhatsApp message',risk:'sensitive',enabled:true},async execute(args,store){if(!store)throw new Error('Connector store unavailable.');return{output:JSON.stringify(await new ConnectorClient(store).whatsappSend(String(args.to||''),String(args.message||'')))};},
+  },
+  {
     name:'homebridge_snapshot',description:'Read live Homebridge accessory states, names, types, and health. Use this to list smart devices or answer whether lights, locks, sensors, thermostats, and switches are on, off, open, locked, or active, on a Homebridge/HomeKit setup (not Home Assistant).',parameters:{type:'object',properties:{},additionalProperties:false},permission:{id:'smart-home-read',label:'Read live Homebridge accessory state',risk:'sensitive',enabled:true},async execute(_args,store){if(!store)throw new Error('Connector store unavailable.');const snapshot=await new ConnectorClient(store).homebridgeSnapshot();if(!snapshot.connected)throw new Error(snapshot.error||'Homebridge is unavailable.');return{output:JSON.stringify(snapshot)};},
   },
   {
@@ -1196,6 +1205,9 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
   if(/\b(shopify|store sales|orders?|revenue)\b/.test(text))names.add('shopify_sales');
   if(/\b(meta|facebook ads?|instagram ads?|ad insights?|ad spend)\b/.test(text))names.add('meta_insights');
   if(/\b(dropbox|cloud files?)\b/.test(text))names.add('dropbox_list_folder');
+  if(/\b(stripe|payments?|charges?|payouts?)\b/.test(text))names.add('stripe_payments');
+  if(/\b(klaviyo|email campaigns?|marketing campaigns?)\b/.test(text))names.add('klaviyo_campaigns');
+  if(/\bwhatsapp\b/.test(text))names.add('whatsapp_send_message');
   // Live failure: "unlock the back door" offered zero tools at all — bare
   // "lock"/"locks?" doesn't match "unlock" (no word boundary between "un"
   // and "lock", same class as "Unsubscribe" not matching "subscribe"

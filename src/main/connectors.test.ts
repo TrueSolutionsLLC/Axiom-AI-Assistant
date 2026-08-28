@@ -30,6 +30,52 @@ describe('service connectors',()=>{
   });
 });
 
+describe('Stripe, Klaviyo, and WhatsApp connectors',()=>{
+  const fakeConnectorStore=(id:ConnectorId,credentials:Partial<{account:string;accessToken:string}>)=>({
+    connectorStatuses:()=>[{id,label:id,configured:true,connected:true,account:credentials.account||'',endpoint:'',scopes:[],setupHint:''}] as unknown as ConnectorStatus[],
+    connectorCredentials:()=>({account:credentials.account||'',endpoint:'',clientId:'',clientSecret:'',accessToken:credentials.accessToken||'',refreshToken:'',scopes:[]}),
+    recordConnectorCheck:vi.fn(),
+  }) as unknown as AppStore;
+
+  it('reads Stripe charges with a restricted secret key, bounded to a real date window',async()=>{
+    const fetchMock=vi.fn(async()=>new Response(JSON.stringify({data:[{id:'ch_1',amount:2000,currency:'usd',status:'succeeded'}]}),{status:200}));vi.stubGlobal('fetch',fetchMock);
+    const result=await new ConnectorClient(fakeConnectorStore('stripe',{accessToken:'sk_restricted_123'})).stripePayments(7);
+    expect(result).toMatchObject({data:[{id:'ch_1',amount:2000}]});
+    const [url,init]=fetchMock.mock.calls[0] as unknown as [string,RequestInit];
+    expect(url).toMatch(/^https:\/\/api\.stripe\.com\/v1\/charges\?limit=25&created\[gte\]=\d+$/);
+    expect((init.headers as Record<string,string>).authorization).toBe('Bearer sk_restricted_123');
+  });
+
+  it('refuses to read Stripe data with no key configured instead of sending an empty auth header',async()=>{
+    await expect(new ConnectorClient(fakeConnectorStore('stripe',{})).stripePayments()).rejects.toThrow(/Stripe API secret key/i);
+  });
+
+  it('sends the required API-revision header on every Klaviyo request',async()=>{
+    const fetchMock=vi.fn(async()=>new Response(JSON.stringify({data:[{id:'camp_1',attributes:{name:'Fall Sale'}}]}),{status:200}));vi.stubGlobal('fetch',fetchMock);
+    const result=await new ConnectorClient(fakeConnectorStore('klaviyo',{accessToken:'pk_private_abc'})).klaviyoCampaigns();
+    expect(result).toMatchObject({data:[{attributes:{name:'Fall Sale'}}]});
+    const [url,init]=fetchMock.mock.calls[0] as unknown as [string,RequestInit];
+    expect(url).toContain('a.klaviyo.com/api/campaigns');
+    const headers=init.headers as Record<string,string>;
+    expect(headers.authorization).toBe('Klaviyo-API-Key pk_private_abc');
+    expect(headers.revision).toBeTruthy();
+  });
+
+  it('sends a WhatsApp text message to the configured Phone Number ID',async()=>{
+    const fetchMock=vi.fn(async()=>new Response(JSON.stringify({messaging_product:'whatsapp',messages:[{id:'wamid.abc'}]}),{status:200}));vi.stubGlobal('fetch',fetchMock);
+    const result=await new ConnectorClient(fakeConnectorStore('whatsapp',{account:'109876543210',accessToken:'whatsapp-token'})).whatsappSend('+15551234567','Your table is ready.');
+    expect(result).toMatchObject({messages:[{id:'wamid.abc'}]});
+    const [url,init]=fetchMock.mock.calls[0] as unknown as [string,RequestInit];
+    expect(url).toBe('https://graph.facebook.com/v24.0/109876543210/messages');
+    expect(JSON.parse(String(init.body))).toMatchObject({messaging_product:'whatsapp',to:'+15551234567',type:'text',text:{body:'Your table is ready.'}});
+  });
+
+  it('surfaces the real 24-hour-window error from Meta instead of a generic failure',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:{message:'Message failed to send because more than 24 hours have passed since the customer last replied to this number.'}}),{status:400})));
+    await expect(new ConnectorClient(fakeConnectorStore('whatsapp',{account:'109876543210',accessToken:'whatsapp-token'})).whatsappSend('+15551234567','Hello again')).rejects.toThrow(/24 hours/);
+  });
+});
+
 describe('Homebridge Config UI X connector',()=>{
   // Unlike Home Assistant's pasted long-lived token, Homebridge Config UI X
   // only offers username/password — Axiom has to log in itself and cache

@@ -22,7 +22,10 @@ export class ConnectorClient {
       else if(id==='meta')await this.metaJson('me?fields=id,name');
       else if(id==='dropbox')await this.dropboxJson('https://api.dropboxapi.com/2/users/get_current_account',{});
       else if(id==='homebridge')await this.homebridgeJson('/api/accessories');
-      else await this.ringJson('https://api.ring.com/clients_api/ring_devices');
+      else if(id==='ring')await this.ringJson('https://api.ring.com/clients_api/ring_devices');
+      else if(id==='stripe')await this.stripeJson('balance');
+      else if(id==='klaviyo')await this.klaviyoJson('accounts');
+      else await this.whatsappJson('?fields=verified_name,display_phone_number');
       this.store.recordConnectorCheck(id);return this.statuses().find((item)=>item.id===id)!;
     }catch(reason){const detail=reason instanceof Error?reason.message:String(reason);this.store.recordConnectorCheck(id,detail);throw new Error(detail);}
   }
@@ -39,6 +42,25 @@ export class ConnectorClient {
   async shopifySales(days=7):Promise<unknown>{const since=new Date(Date.now()-Math.max(1,Math.min(365,days))*86_400_000).toISOString();return this.shopifyGraphql(`query AxiomSales($query:String!){shop{name currencyCode} orders(first:100,query:$query,sortKey:CREATED_AT,reverse:true){nodes{id name createdAt displayFinancialStatus totalPriceSet{shopMoney{amount currencyCode}}}}}`,{query:`created_at:>=${since}`});}
   async metaInsights(datePreset='last_7d'):Promise<unknown>{const credentials=this.store.connectorCredentials('meta'),account=credentials.account.replace(/^act_/,'');if(!account)throw new Error('Add the Meta ad account ID in Settings.');return this.metaJson(`act_${encodeURIComponent(account)}/insights?fields=spend,impressions,clicks,reach,actions&date_preset=${encodeURIComponent(datePreset)}`);}
   async dropboxList(pathValue=''):Promise<unknown>{return this.dropboxJson('https://api.dropboxapi.com/2/files/list_folder',{path:pathValue,recursive:false,include_deleted:false,limit:100});}
+  // Stripe's REST API takes form-encoded query params even on GET, and a
+  // restricted read-only key (the setup hint asks for one specifically)
+  // means there's no server-side risk of this reading more than Balances/
+  // Charges/Customers/PaymentIntents even if a tool argument were malformed.
+  async stripePayments(days=7):Promise<unknown>{const since=Math.floor((Date.now()-Math.max(1,Math.min(365,days))*86_400_000)/1000);return this.stripeJson(`charges?limit=25&created[gte]=${since}`);}
+  private async stripeJson(route:string):Promise<unknown>{const value=this.store.connectorCredentials('stripe');if(!value.accessToken)throw new Error('Configure a Stripe API secret key in Settings.');return requestJson(`https://api.stripe.com/v1/${route}`,{headers:{authorization:`Bearer ${value.accessToken}`}});}
+  // Klaviyo requires a fixed API-revision header on every request — omitting
+  // it either fails outright or silently pins to a stale default revision
+  // depending on the endpoint, so it's always sent explicitly rather than
+  // relying on Klaviyo's own default.
+  async klaviyoCampaigns():Promise<unknown>{return this.klaviyoJson("campaigns?filter=equals(messages.channel,'email')&page[size]=25");}
+  private async klaviyoJson(route:string):Promise<unknown>{const value=this.store.connectorCredentials('klaviyo');if(!value.accessToken)throw new Error('Configure a Klaviyo Private API Key in Settings.');return requestJson(`https://a.klaviyo.com/api/${route}`,{headers:{authorization:`Klaviyo-API-Key ${value.accessToken}`,revision:'2025-04-15'}});}
+  // WhatsApp's Cloud API only allows a free-form text message within 24
+  // hours of the recipient's last message to this business number; outside
+  // that window Meta's API itself rejects it and requires a pre-approved
+  // template instead — surfaced as a real error from Meta, not guessed at
+  // here, so the failure message is whatever Meta's own API actually says.
+  async whatsappSend(to:string,body:string):Promise<unknown>{const clean=to.trim();if(!clean)throw new Error('A recipient phone number is required.');if(!body.trim())throw new Error('Message text is required.');return this.whatsappJson('/messages',{method:'POST',body:JSON.stringify({messaging_product:'whatsapp',to:clean,type:'text',text:{body:body.slice(0,4096)}})});}
+  private async whatsappJson(route:string,init:RequestInit={}):Promise<unknown>{const value=this.store.connectorCredentials('whatsapp');if(!value.account||!value.accessToken)throw new Error('Configure the WhatsApp Phone Number ID and access token in Settings.');return requestJson(`https://graph.facebook.com/v24.0/${encodeURIComponent(value.account)}${route}`,{...init,headers:{authorization:`Bearer ${value.accessToken}`,'content-type':'application/json',...(init.headers||{})}});}
   homebridgeConnection():{endpoint:string;username:string;password:string}{const value=this.store.connectorCredentials('homebridge'),raw=value.endpoint.trim();if(!raw||!value.account||!value.clientSecret)throw new Error('Configure the Homebridge UI URL, username, and password in Settings.');const endpoint=/^https?:\/\//i.test(raw)?raw:`http://${raw}`;let url:URL;try{url=new URL(endpoint);}catch{throw new Error('Homebridge UI URL is invalid. Use http://homebridge.local:8581 or your address.');}if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Homebridge UI URL must use HTTP or HTTPS without embedded credentials.');return{endpoint:url.toString().replace(/\/$/,''),username:value.account,password:value.clientSecret};}
   /** Homebridge Config UI X has no long-lived-token concept like Home
    * Assistant — it issues a short-lived JWT from a username/password login.

@@ -20,6 +20,16 @@ describe('runtime risk classification', () => {
     expect(toolRisk('write','homebridge_control',{characteristic:'Brightness'})).toBe('write');
   });
 
+  it('requires fresh approval before sending a WhatsApp message, same as gmail_send',()=>{
+    expect(toolRisk('sensitive','whatsapp_send_message')).toBe('external');
+    expect(requiresFreshApproval(toolRisk('sensitive','whatsapp_send_message'))).toBe(true);
+    // Read-only connector tools (Stripe/Klaviyo) stay at their declared
+    // base risk — nothing about their name matches the send/publish/
+    // purchase/upload escalation.
+    expect(toolRisk('sensitive','stripe_payments')).toBe('sensitive');
+    expect(toolRisk('sensitive','klaviyo_campaigns')).toBe('sensitive');
+  });
+
   it('permanently deletes memory only with the same destructive escalation as remove_skill/remove_agent',()=>{
     // forget_memory didn't contain "delete"/"remove" so it slipped past the
     // generic escalation regex those two rely on, executing an
