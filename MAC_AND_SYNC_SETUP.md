@@ -49,11 +49,12 @@ The target Mac is Apple silicon, so use the optimized `arm64` package.
 Install Apple's command-line tools once with `xcode-select --install`. Then open Terminal in the Axiom source folder and run:
 
 ```bash
-chmod +x BUILD-AXIOM-MAC.command
 ./BUILD-AXIOM-MAC.command
 ```
 
-The builder verifies macOS arm64, Node 22+, Xcode tools, the bundled local WavLM model and entitlements; it then installs dependencies, runs the complete test suite, builds the app, and writes an SHA-256 manifest.
+(The script is already executable in the repo — no `chmod +x` needed. If your Mac's copy somehow isn't, `chmod +x BUILD-AXIOM-MAC.command` first. Don't run `chmod` on a copy that already has it set and is otherwise unmodified — git sees the permission flip as a local change and will refuse a later `git pull` that also touches this file until it's discarded with `git checkout -- BUILD-AXIOM-MAC.command`.)
+
+The builder verifies macOS arm64, Node 22+, Xcode tools, the bundled local WavLM model and entitlements; it then installs dependencies, builds the app, runs the complete test suite, packages the DMG, and writes an SHA-256 manifest.
 It also completes Electron's binary installation explicitly if npm's install-script policy deferred it, preventing the incomplete-Electron error seen in the earlier 2.0.1 source package.
 
 `BUILD-AXIOM-MAC.command` now handles this itself — if npm reports that a package's install script was blocked (a real npm safety feature; onnxruntime-node's script sets up the native binary the local memory-embedding model needs, so this can silently leave the model non-functional rather than producing a build error), the script approves it automatically and reinstalls. If you're running the steps manually instead of through the script, the approval subcommand's name differs across npm versions — try `npm install-scripts approve <package>` and `npm approve-scripts <package>`; whichever one your npm actually has will work, then repeat `npm install` (or `npm ci`).
