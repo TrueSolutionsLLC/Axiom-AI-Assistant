@@ -15,7 +15,12 @@ tmp/
 qa/
 qa-*/
 Microsoft/
-public/
+# Anchored to the repo root only — a bare "public/" also matches the real,
+# actively-used src/renderer/public/ (every bundled model, mod-asset, and
+# the ONNX runtime WASM live there), silently excluding the entire tree
+# from every commit without any error. Caught the hard way: a Mac clone
+# built from this repo failed because the WavLM model was simply missing.
+/public/
 
 # The extracted source of a real third-party commercial application, kept
 # locally for a clean-room "gap audit" comparison. Must never be committed —
