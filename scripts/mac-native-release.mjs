@@ -40,6 +40,17 @@ if(verifyOnly)process.exit(0);
 // them up front so a signing failure never depends on how the source folder
 // happened to get onto this Mac.
 run('/usr/bin/xattr',['-cr',root]);
+// A real fresh-clone failure: the memory-embedding tests mock the packaged
+// app's model path and expect to find it under dist-renderer/models/ — but
+// dist-renderer/ is build output, gitignored, and only created by `npm run
+// build`. On any machine that already had a stale dist-renderer/ sitting
+// around from an earlier build, running `npm test` before building never
+// surfaced this; a genuinely fresh clone has no such leftover, and every
+// embedding test silently returned "no vector" instead of a real one — not
+// a crash, just every affected test failing with no obvious cause. Building
+// first (dist:mac below rebuilds it again, which is fast and harmless) is
+// what actually guarantees the assets the tests check for exist.
+run('npm',['run','build']);
 run('npm',['test']);
 run('npm',['run','dist:mac']);
 const release=path.join(root,'release');

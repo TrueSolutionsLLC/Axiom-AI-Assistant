@@ -56,7 +56,7 @@ chmod +x BUILD-AXIOM-MAC.command
 The builder verifies macOS arm64, Node 22+, Xcode tools, the bundled local WavLM model and entitlements; it then installs dependencies, runs the complete test suite, builds the app, and writes an SHA-256 manifest.
 It also completes Electron's binary installation explicitly if npm's install-script policy deferred it, preventing the incomplete-Electron error seen in the earlier 2.0.1 source package.
 
-If npm reports that Electron's (or another package's) install script was blocked, run `npm approve-scripts --allow-scripts-pending` (or `npm approve-scripts electron` for just that one package), then repeat `npm ci`.
+`BUILD-AXIOM-MAC.command` now handles this itself — if npm reports that a package's install script was blocked (a real npm safety feature; onnxruntime-node's script sets up the native binary the local memory-embedding model needs, so this can silently leave the model non-functional rather than producing a build error), the script approves it automatically and reinstalls. If you're running the steps manually instead of through the script, the approval subcommand's name differs across npm versions — try `npm install-scripts approve <package>` and `npm approve-scripts <package>`; whichever one your npm actually has will work, then repeat `npm install` (or `npm ci`).
 
 The DMG is created in `release/` as `Axiom-<version>-arm64.dmg` (the version comes from `package.json`).
 
