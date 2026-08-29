@@ -18,6 +18,3 @@
 | Playwright | npm package | Apache-2.0 | Development/visual QA only; excluded from packaged application |
 
 No purchased-assistant assets are authorized for this project.
-# Commissioned Jarvis modification assets
-
-The three `src/renderer/public/mod-assets/skull-*.png` mouth-pose renders were recovered from Robbie's existing commissioned modification set on 2026-08-14 at his explicit request. They are treated as user-supplied project assets and are not sourced from the purchased application's original code. Confirm distribution rights for these images before public or commercial release.
