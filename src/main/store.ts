@@ -95,6 +95,10 @@ interface StoredData {
   ownerOverridePhraseHash?:string;
   ownerOverrideFailures:number;
   ownerOverrideLockedUntil?:string;
+  actionApprovalPhraseSalt?:string;
+  actionApprovalPhraseHash?:string;
+  actionApprovalFailures:number;
+  actionApprovalLockedUntil?:string;
   selfCorrections:SelfCorrection[];
   lastSettingsSnapshot?:{at:string;label:string;data:Partial<StoredData>};
 }
@@ -132,7 +136,7 @@ function seedSelfCorrections():SelfCorrection[]{
     {id:crypto.randomUUID(),pattern:'the owner is not recognized by camera/voice and needs a way back into trusted mode',mistake:'There was no fallback when biometrics genuinely failed (bad angle, lighting, or an enrollment gap) other than getting the camera to cooperate — and a spoken claimed name was correctly never accepted as proof, since that is exactly what an intruder would also say.',fix:'Added a real secret (scrypt-hashed owner override phrase, rate-limited) as the deliberate way back in — distinct from a name, which is public information.',createdAt:now},
   ];
 }
-const defaults = (): StoredData => { const now=new Date().toISOString();return ({ model: 'gpt-5.6-luna', provider:'openai', providerModels:{openai:'gpt-5.6-luna',anthropic:'claude-sonnet-5',gemini:'gemini-3.6-flash'}, autoFailover:true, fallbackOrder:['openai','anthropic','gemini'],codingProvider:'openai',researchProvider:'openai', speechProvider:'openai', elevenLabsVoiceId:'JBFqnCBsd6RMkjVDRZzb', elevenLabsVoiceName:'George', elevenLabsModel:'eleven_flash_v2_5', voiceStability:.5, voiceSimilarity:.78, voiceStyle:.18, voiceSpeed:1.12,mouthCalibrations:{},startMicrophoneOn:true,updateFeedUrl:'',updateChannel:'stable',preferredMicrophoneId:'',preferredMicrophoneLabel:'System default',microphoneNoiseFloor:.006,microphoneSpeechThreshold:.02,speakerLockEnabled:true,voiceProfiles:[],activeVoiceProfileId:'',speakerProfiles:[], history: [], memories: [], goals: [], skills: [], agents: [],agentRuns:[],todos:[],monitors:[],backgroundEvents:[],knownPeople:[], appearance: defaultAppearance(), codingWorkspace: '', godsEyeViewPath: '',permissionOverrides:{},audit:[],runtimeTasks:[],commitments:[],evidence:[],approvals:[],desktopEntities:[],desktopRelations:[],desktopObservations:[],deviceId:crypto.randomUUID(),deviceName:defaultDeviceName(),deviceFirstSeenAt:now,deviceLastActiveAt:now,syncEnabled:false,syncFolder:'',syncPeers:[],appearanceUpdatedAt:now,syncTombstones:[],automaticBackupsEnabled:true,connectors:[],mediaArtifacts:[],ownerOverrideFailures:0,selfCorrections:seedSelfCorrections() }); };
+const defaults = (): StoredData => { const now=new Date().toISOString();return ({ model: 'gpt-5.6-luna', provider:'openai', providerModels:{openai:'gpt-5.6-luna',anthropic:'claude-sonnet-5',gemini:'gemini-3.6-flash'}, autoFailover:true, fallbackOrder:['openai','anthropic','gemini'],codingProvider:'openai',researchProvider:'openai', speechProvider:'openai', elevenLabsVoiceId:'JBFqnCBsd6RMkjVDRZzb', elevenLabsVoiceName:'George', elevenLabsModel:'eleven_flash_v2_5', voiceStability:.5, voiceSimilarity:.78, voiceStyle:.18, voiceSpeed:1.12,mouthCalibrations:{},startMicrophoneOn:true,updateFeedUrl:'',updateChannel:'stable',preferredMicrophoneId:'',preferredMicrophoneLabel:'System default',microphoneNoiseFloor:.006,microphoneSpeechThreshold:.02,speakerLockEnabled:true,voiceProfiles:[],activeVoiceProfileId:'',speakerProfiles:[], history: [], memories: [], goals: [], skills: [], agents: [],agentRuns:[],todos:[],monitors:[],backgroundEvents:[],knownPeople:[], appearance: defaultAppearance(), codingWorkspace: '', godsEyeViewPath: '',permissionOverrides:{},audit:[],runtimeTasks:[],commitments:[],evidence:[],approvals:[],desktopEntities:[],desktopRelations:[],desktopObservations:[],deviceId:crypto.randomUUID(),deviceName:defaultDeviceName(),deviceFirstSeenAt:now,deviceLastActiveAt:now,syncEnabled:false,syncFolder:'',syncPeers:[],appearanceUpdatedAt:now,syncTombstones:[],automaticBackupsEnabled:true,connectors:[],mediaArtifacts:[],ownerOverrideFailures:0,actionApprovalFailures:0,selfCorrections:seedSelfCorrections() }); };
 
 const recordTime=(item:unknown):number=>{const record=item as {createdAt?:string;updatedAt?:string;lastRunAt?:string;at?:string};return Date.parse(record.updatedAt||record.lastRunAt||record.createdAt||record.at||'')||0;};
 function mergeRecords<T extends {id:string}>(local:T[],remote:T[],limit:number):T[]{const map=new Map<string,T>();for(const item of [...local,...remote]){const current=map.get(item.id);if(!current||recordTime(item)>=recordTime(current))map.set(item.id,item);}return[...map.values()].sort((a,b)=>recordTime(a)-recordTime(b)).slice(-limit);}
@@ -280,6 +284,7 @@ export class AppStore {
       hasSyncPassphrase:Boolean(this.data.encryptedSyncPassphrase),
       automaticBackupsEnabled:this.data.automaticBackupsEnabled,
       hasOwnerOverridePhrase:this.hasOwnerOverridePhrase(),
+      hasActionApprovalPhrase:this.hasActionApprovalPhrase(),
     };
   }
 
@@ -348,6 +353,8 @@ export class AppStore {
     if(typeof input.speakerLockEnabled==='boolean')this.data.speakerLockEnabled=input.speakerLockEnabled;
     if(input.clearOwnerOverridePhrase)this.clearOwnerOverridePhrase();
     else if(input.ownerOverridePhrase?.trim())this.setOwnerOverridePhrase(input.ownerOverridePhrase);
+    if(input.clearActionApprovalPhrase)this.clearActionApprovalPhrase();
+    else if(input.actionApprovalPhrase?.trim())this.setActionApprovalPhrase(input.actionApprovalPhrase);
     this.flush();
     return this.publicSettings();
   }
@@ -539,6 +546,43 @@ export class AppStore {
     if(match){this.data.ownerOverrideFailures=0;delete this.data.ownerOverrideLockedUntil;this.flush();return true;}
     this.data.ownerOverrideFailures=(this.data.ownerOverrideFailures??0)+1;
     if(this.data.ownerOverrideFailures>=5){this.data.ownerOverrideLockedUntil=new Date(Date.now()+10*60_000).toISOString();this.data.ownerOverrideFailures=0;}
+    this.flush();
+    return false;
+  }
+
+  /**
+   * An optional, opt-in shortcut, requested directly by the user in place of
+   * the default "APPROVE AX-XXXXXX" code: one static personal phrase that
+   * resolves whatever single action is currently pending, instead of a
+   * fresh random code per action. This is a real, deliberate weakening of
+   * the Permission Kernel's default one-time-code design — the user was
+   * told exactly that trade-off (a static phrase can't tell two
+   * simultaneously-pending actions apart) before choosing it, and it stays
+   * off unless explicitly set. Never sent to any AI provider — checked only
+   * here, main-process side, same scrypt-hashed/rate-limited pattern as the
+   * owner override phrase above, not plaintext and not a shared secret with
+   * anything else in the app.
+   */
+  hasActionApprovalPhrase():boolean{return Boolean(this.data.actionApprovalPhraseHash&&this.data.actionApprovalPhraseSalt);}
+  setActionApprovalPhrase(phrase:string):void{
+    const clean=phrase.trim();
+    if(clean.length<8)throw new Error('Use an approval phrase of at least 8 characters — not just a short word anyone could guess or say by accident.');
+    const salt=crypto.randomBytes(16);
+    this.data.actionApprovalPhraseSalt=salt.toString('base64');
+    this.data.actionApprovalPhraseHash=crypto.scryptSync(clean,salt,32,{N:16384,r:8,p:1,maxmem:64*1024*1024}).toString('base64');
+    this.data.actionApprovalFailures=0;delete this.data.actionApprovalLockedUntil;
+    this.flush();
+  }
+  clearActionApprovalPhrase():void{delete this.data.actionApprovalPhraseHash;delete this.data.actionApprovalPhraseSalt;this.data.actionApprovalFailures=0;delete this.data.actionApprovalLockedUntil;this.flush();}
+  verifyActionApprovalPhrase(phrase:string):boolean{
+    if(!this.hasActionApprovalPhrase())return false;
+    if(this.data.actionApprovalLockedUntil&&Date.parse(this.data.actionApprovalLockedUntil)>Date.now())return false;
+    const salt=Buffer.from(this.data.actionApprovalPhraseSalt!,'base64'),expected=Buffer.from(this.data.actionApprovalPhraseHash!,'base64');
+    const actual=crypto.scryptSync(String(phrase??'').trim(),salt,32,{N:16384,r:8,p:1,maxmem:64*1024*1024});
+    const match=actual.length===expected.length&&crypto.timingSafeEqual(actual,expected);
+    if(match){this.data.actionApprovalFailures=0;delete this.data.actionApprovalLockedUntil;this.flush();return true;}
+    this.data.actionApprovalFailures=(this.data.actionApprovalFailures??0)+1;
+    if(this.data.actionApprovalFailures>=5){this.data.actionApprovalLockedUntil=new Date(Date.now()+10*60_000).toISOString();this.data.actionApprovalFailures=0;}
     this.flush();
     return false;
   }

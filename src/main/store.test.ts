@@ -234,6 +234,70 @@ describe('owner override phrase', () => {
   });
 });
 
+// A separate, distinct secret from the owner override phrase above — an
+// opt-in shortcut Robbie explicitly asked for in place of the default
+// per-action AX-XXXXXX approval code, after being told the real trade-off
+// (a static phrase can't tell two simultaneously-pending actions apart, the
+// way a fresh random code per action can). Same scrypt-hashed, rate-limited
+// storage pattern, deliberately mirrored rather than reusing the owner
+// override phrase's own fields, since they authorize genuinely different
+// things and must be independently settable/clearable.
+describe('action approval phrase', () => {
+  beforeEach(() => { machineKey = 'machine-A'; userData = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-store-')); });
+
+  it('is absent by default and never accepts a guess before one is set', () => {
+    const store = newStore();
+    expect(store.hasActionApprovalPhrase()).toBe(false);
+    expect(store.publicSettings().hasActionApprovalPhrase).toBe(false);
+    expect(store.verifyActionApprovalPhrase('anything')).toBe(false);
+  });
+
+  it('accepts only the exact enrolled phrase, and only after it is set', () => {
+    const store = newStore();
+    saveKeys(store, { actionApprovalPhrase: 'unlock the gates of dawn' });
+    expect(store.publicSettings().hasActionApprovalPhrase).toBe(true);
+    expect(store.verifyActionApprovalPhrase('unlock the gates of dawn')).toBe(true);
+    expect(store.verifyActionApprovalPhrase('Unlock The Gates Of Dawn')).toBe(false);
+    expect(store.verifyActionApprovalPhrase('wrong phrase entirely')).toBe(false);
+  });
+
+  it('refuses to enroll a short phrase', () => {
+    const store = newStore();
+    expect(() => saveKeys(store, { actionApprovalPhrase: 'short' })).toThrow(/at least 8/i);
+  });
+
+  it('locks out after 5 wrong attempts and stays locked for the genuinely correct phrase too', () => {
+    const store = newStore();
+    saveKeys(store, { actionApprovalPhrase: 'unlock the gates of dawn' });
+    for (let attempt = 0; attempt < 5; attempt += 1) expect(store.verifyActionApprovalPhrase('nope')).toBe(false);
+    expect(store.verifyActionApprovalPhrase('unlock the gates of dawn')).toBe(false);
+  });
+
+  it('is stored hashed, never as plaintext, in the persisted file', () => {
+    const store = newStore();
+    saveKeys(store, { actionApprovalPhrase: 'unlock the gates of dawn' });
+    const raw = fs.readFileSync(dataFile(), 'utf8');
+    expect(raw).not.toContain('unlock the gates of dawn');
+  });
+
+  it('can be cleared, after which no phrase verifies', () => {
+    const store = newStore();
+    saveKeys(store, { actionApprovalPhrase: 'unlock the gates of dawn' });
+    store.saveSettings({ model: '', clearActionApprovalPhrase: true } as never);
+    expect(store.publicSettings().hasActionApprovalPhrase).toBe(false);
+    expect(store.verifyActionApprovalPhrase('unlock the gates of dawn')).toBe(false);
+  });
+
+  it('is independent of the owner override phrase — setting one never affects the other', () => {
+    const store = newStore();
+    saveKeys(store, { ownerOverridePhrase: 'correct horse battery staple', actionApprovalPhrase: 'unlock the gates of dawn' });
+    expect(store.verifyOwnerOverridePhrase('unlock the gates of dawn')).toBe(false);
+    expect(store.verifyActionApprovalPhrase('correct horse battery staple')).toBe(false);
+    expect(store.verifyOwnerOverridePhrase('correct horse battery staple')).toBe(true);
+    expect(store.verifyActionApprovalPhrase('unlock the gates of dawn')).toBe(true);
+  });
+});
+
 describe('self-corrections — Axiom remembering its own past mistakes', () => {
   beforeEach(() => { machineKey = 'machine-A'; userData = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-store-')); });
 

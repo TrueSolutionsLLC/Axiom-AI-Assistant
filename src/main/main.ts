@@ -284,6 +284,21 @@ async function decideApproval(idOrCode:string,decision:'approved'|'denied'):Prom
   const result=await executeTool(pending.toolName,pending.args,store,`APPROVE ${pending.code}. ${pending.preview}`);store.finishApproval(pending.id,result.event.status==='verified'?'executed':'failed',result.event.summary);store.appendAudit([result.event],pending.sourceTaskId);if(pending.sourceTaskId)store.settleRuntimeTask(pending.sourceTaskId,result.event.status==='verified'?'completed':'failed',result.event.summary);const message=result.event.status==='verified'?`${pending.code} executed and verified: ${result.event.summary}`:`${pending.code} failed without being reported as complete: ${result.event.summary}`;return{runtime:runtimeSnapshot(),event:result.event,message};
 }
 
+// The optional static approval phrase (store.setActionApprovalPhrase) can't
+// tell two simultaneously-pending actions apart the way a fresh per-action
+// AX-XXXXXX code can — the user was told exactly that trade-off before
+// opting in. Ambiguous is refused outright rather than guessing which one
+// was meant; a genuine mismatch just reports unmatched, never anything
+// about what a real code would have been.
+async function decideApprovalByPhrase(phrase:string):Promise<ApprovalDecisionResult&{matched:boolean}>{
+  if(!store.verifyActionApprovalPhrase(phrase))return{matched:false,runtime:runtimeSnapshot(),message:''};
+  const pending=store.approvals().filter((item)=>item.status==='pending');
+  if(!pending.length)return{matched:true,runtime:runtimeSnapshot(),message:'Your approval phrase matched, but nothing is currently awaiting approval.'};
+  if(pending.length>1)return{matched:true,runtime:runtimeSnapshot(),message:`Your approval phrase matched, but ${pending.length} actions are currently awaiting approval — say the exact code (e.g. APPROVE ${pending[0].code}) or open CORE to choose the right one.`};
+  const decision=await decideApproval(pending[0].id,'approved');
+  return{matched:true,...decision};
+}
+
 async function adaptiveAssistantCore(input:AssistantRequest,onDelta?:(delta:string)=>void){
   const settings=store.publicSettings();const directAction=input.untrustedPresence?undefined:deterministicActionRoute(input.message);
   if(directAction){const result=await executeTool(directAction.name,directAction.args,store,input.message),text=normalizeActionReply(directAction.successText,[result.event],true);onDelta?.(text);return{text,provider:settings.provider,model:settings.model,toolEvents:[result.event]};}
@@ -494,6 +509,16 @@ function registerIpc(): void {
     const clean = input.message.trim().slice(0, 20_000);
     if (!clean) throw new Error('Message is empty.');
     const approvalCommand=/\b(APPROVE|DENY)\s+(AX-[A-F0-9]{6})\b/i.exec(clean);if(approvalCommand){const outcome=await decideApproval(approvalCommand[2],approvalCommand[1].toUpperCase()==='APPROVE'?'approved':'denied'),settings=store.publicSettings();const reply={text:outcome.message,provider:settings.provider,model:settings.model,toolEvents:outcome.event?[outcome.event]:[]};store.appendHistory(message('user',clean),message('assistant',reply.text));return reply;}
+    // Opt-in shortcut requested directly by the user in place of the
+    // default per-action AX-XXXXXX code: a single static personal phrase.
+    // Only even attempted (scrypt is deliberately slow) when something is
+    // actually pending, so ordinary conversation never pays this cost. On a
+    // genuine mismatch this falls straight through to normal processing —
+    // never intercepts, never reveals whether anything was close.
+    if(store.hasActionApprovalPhrase()&&store.approvals().some((item)=>item.status==='pending')){
+      const phraseOutcome=await decideApprovalByPhrase(clean);
+      if(phraseOutcome.matched){const settings=store.publicSettings();const reply={text:phraseOutcome.message,provider:settings.provider,model:settings.model,toolEvents:phraseOutcome.event?[phraseOutcome.event]:[]};store.appendHistory(message('user','•••••••• (approval phrase)'),message('assistant',reply.text));return reply;}
+    }
     const routeCandidates=providerTools(clean).map((tool)=>String(tool.name||tool.type||'')).filter(Boolean);reliability.beginRoute(clean,routeCandidates);
     const faceName=input.identity?.face?.name.trim().toLowerCase(),speakerName=input.identity?.speaker?.name.trim().toLowerCase(),identityConflict=Boolean(faceName&&speakerName&&faceName!==speakerName);
     const safeInput=identityConflict?{...input,untrustedPresence:true}:input;

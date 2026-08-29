@@ -211,6 +211,12 @@ export interface PublicSettings {
    * an enrolled owner. Only whether one is set is exposed here; the phrase
    * itself never leaves the main process. */
   hasOwnerOverridePhrase:boolean;
+  /** An optional static phrase (distinct from the owner override phrase
+   * above) that approves whatever single action is currently awaiting
+   * approval, in place of the default per-action AX-XXXXXX code. Only
+   * whether one is set is exposed here; the phrase itself never leaves the
+   * main process. */
+  hasActionApprovalPhrase:boolean;
 }
 
 export interface SaveSettingsRequest {
@@ -263,6 +269,8 @@ export interface SaveSettingsRequest {
   automaticBackupsEnabled?:boolean;
   ownerOverridePhrase?:string;
   clearOwnerOverridePhrase?:boolean;
+  actionApprovalPhrase?:string;
+  clearActionApprovalPhrase?:boolean;
 }
 
 export interface PermissionInfo {
