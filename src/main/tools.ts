@@ -1087,7 +1087,18 @@ const identityRequestPattern = /\b(?:my name is|call me|who am i|who (?:are you|
 // device read. Scoped to lock/on-off/open-closed/armed-disarmed state
 // words specifically, not broadened generally, since actionRequestPattern
 // is used well beyond smart-home requests.
-const smartHomeStateQuestionPattern = /\b(?:is|are)\b[\s\S]{0,60}\b(?:locked|unlocked|on|off|open|closed|armed|disarmed)\b/i;
+//
+// A second live failure, reproduced exactly: voice-to-text turned "Is the
+// back door locked?" into "There's the back door locked?" — no bare "is"
+// or "are" token at all ("There's" doesn't contain one), so this still
+// missed and Axiom hallucinated an answer instead of reading the real
+// device, only correcting itself after being challenged. Added only the
+// exact contraction/reordering this real garble needs ("there's"/"is
+// there") — deliberately not widening to was/were/has/does too, since
+// those combined with common short state words like "on"/"off" would
+// false-trigger on plenty of ordinary sentences that have nothing to do
+// with a smart-home device ("does it work on Tuesday").
+const smartHomeStateQuestionPattern = /\b(?:is|are|there'?s|is\s+there)\b[\s\S]{0,60}\b(?:locked|unlocked|on|off|open|closed|armed|disarmed)\b/i;
 
 // A blocked destructive action tells the user to "say APPROVE AX-XXXXXX",
 // but that phrase alone shares no keywords with the original request (e.g.
@@ -1260,7 +1271,6 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
   // "unlock" entirely, not just a boundary issue. Both word forms are now
   // covered.
   if(/\b(homebridge|homekit|smart[ -]?home|smart (?:lights?|locks?|switches?|devices?)|lights?|locks?|locked|unlocks?|unlocked|thermostats?|climate|garage(?: door)?|door sensors?|motion sensors?|alarm system|armed|disarmed|scenes?)\b/.test(text)){
-    names.add('homebridge_snapshot');
     // A pure status question ("is the back door locked?") only ever needs a
     // read, never the control tool — offering control alongside it was
     // needless noise. Narrowing a read-only question to just the read tool
@@ -1271,7 +1281,22 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
     // Distinguished from an action request by looking for the bare
     // imperative verb ("lock"/"unlock", not "locked"/"unlocked") rather
     // than trying to fully parse intent.
-    if(/\b(turn|set|dim|lock|unlock|open|close|arm|disarm|switch)\b/.test(text))names.add('homebridge_control');
+    const isAction=/\b(turn|set|dim|lock|unlock|open|close|arm|disarm|switch)\b/.test(text);
+    // Live failure, reproduced exactly: "Lock the back door" used to add
+    // BOTH homebridge_snapshot and homebridge_control together for any
+    // action request, diluting the pool to 2 candidates — soleToolName()
+    // (openai.ts) only hard-forces a specific tool when exactly one
+    // candidate exists, so with 2 the model fell back to the softer
+    // generic "a tool is required" hint and, on the very first ask,
+    // answered in free text with an invented "reply the same phrase to
+    // approve" confirmation instead of ever calling the real tool — only
+    // the second, identical request actually triggered it. Offering only
+    // homebridge_control for a clear action request restores the hard
+    // guarantee; it isn't losing grounding by dropping the read, since
+    // homebridge_control's own execute() already re-reads and verifies the
+    // accessory after the change.
+    if(isAction)names.add('homebridge_control');
+    else names.add('homebridge_snapshot');
   }
   // "Draw me a dog" / "sketch a logo" is how most people actually ask for
   // image generation; "generate/create/make/render" alone missed it.

@@ -388,8 +388,12 @@ describe('latency-aware tool routing', () => {
 
   it('routes smart-home questions and actions through Homebridge',()=>{
     expect(deterministicReadRoute('What is the status of my smart home lights?')?.name).toBe('homebridge_snapshot');
+    // An action request (bare imperative verb — "turn") resolves to
+    // homebridge_control alone now, not both tools together — see the
+    // "resolves an action request to exactly one tool" test above for why:
+    // offering both denies the hard exact-name forcing a sole candidate
+    // gets, which a real live failure traced back to a missed tool call.
     const tools=providerTools('Turn on the office smart light and verify it');
-    expect(tools.some((tool)=>tool.name==='homebridge_snapshot')).toBe(true);
     expect(tools.some((tool)=>tool.name==='homebridge_control')).toBe(true);
   });
 
@@ -402,7 +406,6 @@ describe('latency-aware tool routing', () => {
   describe('Homebridge smart-home routing',()=>{
     it('offers Homebridge/HomeKit tools for smart-home phrasing',()=>{
       const tools=providerTools('Turn on the office smart light and verify it');
-      expect(tools.some((tool)=>tool.name==='homebridge_snapshot')).toBe(true);
       expect(tools.some((tool)=>tool.name==='homebridge_control')).toBe(true);
       const homekitTools=providerTools('Is the homebridge office light on?');
       expect(homekitTools.some((tool)=>tool.name==='homebridge_snapshot')).toBe(true);
@@ -442,14 +445,36 @@ describe('latency-aware tool routing', () => {
         expect(requiresToolUse('Is the back door locked?',tools)).toBe(true);
       });
 
+      // Real, live failure: voice-to-text turned "Is the back door locked?"
+      // into "There's the back door locked?" — no bare "is"/"are" token at
+      // all — and Axiom answered "Yes, locked" from nothing, only
+      // self-correcting to the real (unlocked) state after being
+      // challenged on it.
+      it('still forces the read for the exact voice-garbled phrasing that hallucinated live ("There\'s" instead of "Is")',()=>{
+        const tools=providerTools("There's the back door locked?",onlyHomebridge);
+        expect(tools.map((tool)=>tool.name)).toEqual(['homebridge_snapshot']);
+        expect(requiresToolUse("There's the back door locked?",tools)).toBe(true);
+      });
+
       it('matches "locked"/"unlocked" (adjective form), not just "lock"/"unlock" (verb form)',()=>{
         expect(providerTools('What is the alarm state — is it armed or disarmed?',onlyHomebridge).map((tool)=>tool.name)).toEqual(['homebridge_snapshot']);
         expect(providerTools('Is the back door locked or unlocked right now?',onlyHomebridge).map((tool)=>tool.name)).toContain('homebridge_snapshot');
       });
 
-      it('still offers the control tool alongside the read for an actual action request, not just a question',()=>{
+      // Real, live failure: offering BOTH tools together for "Lock the back
+      // door" diluted the candidate pool to 2, which denies the hard
+      // exact-name tool forcing that only kicks in for a sole candidate
+      // (soleToolName(), openai.ts) — so the model fell back to the softer
+      // generic "a tool is required" hint and, on the actual live turn,
+      // answered in free text with an invented "reply the same phrase to
+      // approve" confirmation instead of ever calling homebridge_control.
+      // Only the second, identical request happened to trigger it for
+      // real. An action request now resolves to homebridge_control alone —
+      // its own execute() already re-reads and verifies the accessory
+      // after the change, so nothing is lost by not also offering the read.
+      it('resolves an action request to exactly one tool — control, not read — restoring the hard-forcing guarantee',()=>{
         const tools=providerTools('Lock the back door',onlyHomebridge).map((tool)=>tool.name);
-        expect(tools).toEqual(expect.arrayContaining(['homebridge_snapshot','homebridge_control']));
+        expect(tools).toEqual(['homebridge_control']);
       });
 
       it('does not mistake a past-tense/adjective status word for an imperative action verb',()=>{

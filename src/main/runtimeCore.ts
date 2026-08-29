@@ -89,7 +89,12 @@ export function approvalPreview(toolName: string, args: Record<string, unknown>)
   const clean = (value: unknown) => String(value ?? '').trim().slice(0, 260);
   if (toolName === 'delete_project_file') return { preview: `Delete project file ${clean(args.path)}.`, recovery: 'Axiom will create a checkpoint before deletion so the file can be restored.' };
   if (toolName === 'restore_project_checkpoint') return { preview: `Restore project checkpoint ${clean(args.checkpoint)}.`, recovery: 'Review the checkpoint manifest and rerun the project checks after restoration.' };
-  if (toolName === 'control_application_window') return { preview: `Close application window ${clean(args.target)}.`, recovery: 'Unsaved application state may not be recoverable; reopen the application if needed.' };
+  // control_application_window's real schema field is `application`, not
+  // `target` — reading the wrong key here silently produced "Close
+  // application window ." with the actual app name missing every single
+  // time this approval fired, live and reproduced: Robbie was asked to
+  // approve closing a window with no way to tell which one from the text.
+  if (toolName === 'control_application_window') return { preview: `Close application window “${clean(args.application)}”.`, recovery: 'Unsaved application state may not be recoverable; reopen the application if needed.' };
   if (toolName === 'browser_press') return { preview: `Press Enter in Axiom Browser. This may submit the focused form.`, recovery: 'If the site accepts the submission, recovery depends on that site.' };
   if (toolName === 'browser_click') return { preview: `Click “${clean(args.text)}” in Axiom Browser. This may create an external action.`, recovery: 'Axiom will reread the page and report the resulting state.' };
   if(toolName==='gmail_send')return{preview:`Send email to ${clean(args.to)} with subject “${clean(args.subject)}”.`,recovery:'Sent email cannot be recalled reliably; Axiom will report the Gmail message ID.'};

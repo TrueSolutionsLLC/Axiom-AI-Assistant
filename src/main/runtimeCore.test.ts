@@ -69,6 +69,15 @@ describe('runtime risk classification', () => {
     expect(approvalPreview('delete_project_file',{path:'src/old.ts'})).toMatchObject({preview:'Delete project file src/old.ts.'});
     expect(approvalPreview('homebridge_control',{target:'Front Door',characteristic:'LockTargetState',value:0}).preview).toContain('Front Door');
   });
+
+  // Real, live bug: control_application_window's actual schema field is
+  // `application`, not `target` — approvalPreview() was reading the wrong
+  // key, so every close-window approval showed "Close application window ."
+  // with the real app name silently missing, no matter what the model sent.
+  it('names the real application in a close-window approval preview, not an empty field', () => {
+    expect(approvalPreview('control_application_window',{application:'Slack',action:'close'}).preview).toContain('Slack');
+    expect(approvalPreview('control_application_window',{application:'Slack',action:'close'}).preview).not.toBe('Close application window “”.');
+  });
 });
 
 describe('runtime evidence', () => {
