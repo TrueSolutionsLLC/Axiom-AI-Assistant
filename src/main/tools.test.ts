@@ -782,6 +782,7 @@ describe("God's Eye View integration", () => {
     const manager={isOpen:true,setLayers:async()=>{throw new Error('Unknown God\'s Eye View layer "drones". Known layers: flights, satellites.');}};
     const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
     const result=await executeTool('gods_eye_set_layers',{enable:['drones']},store);
-    expect(result.event.status).toBe('blocked');
+    expect(result.event.status).toBe('failed');
+    expect(result.output).toContain('Unknown');
   });
 });
