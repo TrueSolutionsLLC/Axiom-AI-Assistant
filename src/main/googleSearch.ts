@@ -48,6 +48,15 @@ async function settle(window: BrowserWindow, timeout = 12_000): Promise<void> {
   ]);
 }
 
+// A weather query ("weather 63049", "forecast for St. Louis") never has an
+// h3-linked result at all — Google answers it entirely inside an inline
+// widget instead, so the h3 walk above legitimately finds nothing even on a
+// completely successful, unblocked page load. That widget's ids (wob_wc /
+// wob_tm / wob_dc / wob_loc / wob_hm / wob_ws / wob_pp — "wob" = "weather on
+// [g]oogle") have been stable for years independent of the rest of the
+// page's class-name churn, the same reasoning EXTRACT_SCRIPT already uses
+// for h3. Extracted here rather than guessed as a fix, since this sandbox
+// cannot load google.com directly to confirm live — flagged as such below.
 const EXTRACT_SCRIPT = `(() => {
   const clean = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
   const seen = new Set();
@@ -68,8 +77,42 @@ const EXTRACT_SCRIPT = `(() => {
     }
     items.push({ title, url, snippet });
   }
-  return items;
+  let weather = null;
+  const widget = document.querySelector('#wob_wc');
+  if (widget) {
+    const temp = clean(document.querySelector('#wob_tm')?.textContent);
+    const desc = clean(document.querySelector('#wob_dc')?.textContent);
+    if (temp || desc) weather = {
+      temp, desc,
+      loc: clean(document.querySelector('#wob_loc')?.textContent),
+      humidity: clean(document.querySelector('#wob_hm')?.textContent),
+      wind: clean(document.querySelector('#wob_ws')?.textContent),
+      precip: clean(document.querySelector('#wob_pp')?.textContent),
+    };
+  }
+  // Captured on every pass (cheap, already-loaded DOM) rather than only on
+  // failure, so a total-failure error can name the real page Google showed
+  // instead of guessing at "consent or verification" — the exact question
+  // this bug was reported with no way to answer before.
+  return { items, weather, page: { title: document.title, bodyPreview: clean(document.body ? document.body.innerText : '').slice(0, 400) } };
 })()`;
+
+interface WeatherSnapshot { temp: string; desc: string; loc: string; humidity: string; wind: string; precip: string }
+interface PageSnapshot { title: string; bodyPreview: string }
+interface Extraction { items: WebSearchResult[]; weather: WeatherSnapshot | null; page: PageSnapshot }
+
+const weatherAsResult = (weather: WeatherSnapshot | null, url: string): WebSearchResult[] => {
+  if (!weather) return [];
+  const headline = [weather.temp, weather.desc].filter(Boolean).join(', ');
+  const detail = [weather.precip && `Precipitation ${weather.precip}`, weather.humidity && `Humidity ${weather.humidity}`, weather.wind && `Wind ${weather.wind}`].filter(Boolean).join(' · ');
+  return [{ title: `Weather${weather.loc ? ` for ${weather.loc}` : ''} — Google`, url, snippet: [headline, detail].filter(Boolean).join(' — ') }];
+};
+
+// A blocked/CAPTCHA page and a genuinely empty page both fail the same way
+// (zero h3 results, zero weather widget) — the message previously couldn't
+// tell them apart. Google's own automation-detection page has used this
+// exact phrasing for years.
+const automationBlockPattern = /unusual traffic|automated queries|solve this puzzle|verify you're not a robot|recaptcha/i;
 
 /** A first-run or cookie-cleared session shows a consent interstitial
  * instead of results; there is no h3 heading on that page. Best-effort:
@@ -109,13 +152,20 @@ export async function searchGoogle(query: string, limit = 5): Promise<WebSearchR
   // Google's own script renders results a tick after the network considers
   // the page "settled" — did-stop-loading fires before the DOM is populated.
   await new Promise((resolve) => setTimeout(resolve, 900));
-  let results = await window.webContents.executeJavaScript(EXTRACT_SCRIPT, true) as WebSearchResult[];
+  let extraction = await window.webContents.executeJavaScript(EXTRACT_SCRIPT, true) as Extraction;
+  let results = [...weatherAsResult(extraction.weather, window.webContents.getURL()), ...extraction.items];
   if (!results.length && await dismissConsentIfPresent(window)) {
     await new Promise((resolve) => setTimeout(resolve, 900));
-    results = await window.webContents.executeJavaScript(EXTRACT_SCRIPT, true) as WebSearchResult[];
+    extraction = await window.webContents.executeJavaScript(EXTRACT_SCRIPT, true) as Extraction;
+    results = [...weatherAsResult(extraction.weather, window.webContents.getURL()), ...extraction.items];
   }
   const trimmed = results.slice(0, Math.max(1, Math.min(10, limit)));
-  if (!trimmed.length) throw new Error('Live Google search returned no parseable results. Google may have shown a consent or verification page instead of results, or changed its page layout.');
+  if (!trimmed.length) {
+    if (automationBlockPattern.test(extraction.page.title) || automationBlockPattern.test(extraction.page.bodyPreview)) {
+      throw new Error("Google flagged this as automated traffic and showed a verification page instead of results (this can happen from a shared or VPN network address) — a plain retry usually will not help until that clears.");
+    }
+    throw new Error(`Live Google search returned no parseable results. Google's page was titled "${extraction.page.title || 'unknown'}" — it may have shown a consent, verification, or answer-only page instead of standard results, or changed its layout.`);
+  }
   return trimmed;
 }
 
