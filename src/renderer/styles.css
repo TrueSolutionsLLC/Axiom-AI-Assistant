@@ -320,6 +320,16 @@
 @keyframes gods-eye-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.gods-eye-panel,.gods-eye-panel.materializing,.gods-eye-panel.derezzing,.gods-eye-scan-sweep,.gods-eye-spinner{animation:none!important;transition-duration:.001ms!important}.gods-eye-panel.materializing,.gods-eye-panel.live,.gods-eye-panel.derezzing{opacity:1!important;transform:none!important}}
 
+.model-tier-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.model-tier-picker button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;height:auto;padding:9px 11px;border:1px solid rgba(var(--signal),.16);background:rgba(2,15,18,.72);color:#71979a;cursor:pointer;text-align:left}
+.model-tier-picker button b{font:600 9px "Cascadia Mono",Consolas,monospace;letter-spacing:.12em;color:#9dc4c7}
+.model-tier-picker button span{font:400 9px "Cascadia Mono",Consolas,monospace;color:#5c8286;word-break:break-all}
+.model-tier-picker button em{font:400 8px "Cascadia Mono",Consolas,monospace;font-style:normal;color:#4c6d71}
+.model-tier-picker button.active{border-color:rgba(var(--signal),.65);background:rgba(var(--signal),.12);box-shadow:inset 0 0 18px rgba(var(--signal),.06)}
+.model-tier-picker button.active b{color:var(--signal-solid)}
+.model-tier-picker button.active em{color:#7fa6a9}
+@media(max-width:760px){.model-tier-picker{grid-template-columns:1fr}}
+
 .modded-eyes-clickable{pointer-events:auto;cursor:pointer}
 .modded-eyes-clickable:hover>i,.modded-eyes-clickable:focus-visible>i{filter:brightness(1.35) drop-shadow(0 0 14px rgba(var(--avatar-rgb),1))}
 .modded-eyes-clickable:focus-visible{outline:1px solid rgba(var(--avatar-rgb),.7);outline-offset:4px}

@@ -1,6 +1,6 @@
 {
   "name": "axiom-assistant",
-  "version": "3.23.1",
+  "version": "3.23.2",
   "private": true,
   "description": "Clean-room Windows AI companion (working title)",
   "main": "dist-main/main/main.js",
