@@ -99,8 +99,26 @@ export class GodsEyeViewManager {
       this.view = new WebContentsView({ webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
       this.window.contentView.addChildView(this.view);
     }
-    if (this.view.webContents.getURL() !== URL) await this.view.webContents.loadURL(URL);
+    // startsWith, not a strict equality check: after a real flyTo()/
+    // setLayers() call the view's URL legitimately carries a #hash (see
+    // writeHash() below). A strict `!== URL` here used to treat that as "not
+    // loaded yet" and reload the bare URL — silently wiping the camera
+    // position and every enabled layer any time open_gods_eye_view was
+    // called again on an already-open, already-positioned view.
+    if (!this.view.webContents.getURL().startsWith(URL)) await this.view.webContents.loadURL(URL);
     return { ready: true, url: URL };
+  }
+
+  private async waitForLoad(timeoutMs = 8_000): Promise<void> {
+    const webContents = this.view?.webContents;
+    if (!webContents) return;
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        if (!webContents.isLoading()) return resolve();
+        webContents.once('did-stop-loading', () => resolve());
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
   }
 
   setBounds(bounds: { x: number; y: number; width: number; height: number }): void {
@@ -127,6 +145,19 @@ export class GodsEyeViewManager {
   // so one aspect can change without disturbing another. An earlier version
   // of this file overwrote the whole hash on every flyTo(), which would have
   // silently turned off any layer a prior setLayers() call had enabled.
+  //
+  // The reload() afterward is not optional. Confirmed by reading the app's
+  // actual source (src/sharelink.js): it parses location.hash exactly once,
+  // in parseInitialHash(), called at initial mount — there is no
+  // window.addEventListener('hashchange', ...) anywhere in it. Setting
+  // location.hash after the page is already running updates the address
+  // silently and does nothing else; that's the real bug behind Axiom
+  // reporting a "verified" camera move that never visibly happened — the
+  // write succeeded, nothing was listening. A same-document hash-only
+  // navigation (location.hash = ... or loadURL to the same path+hash)
+  // doesn't force a reload either, so an explicit reload() is required to
+  // make the app re-run its own hash-driven startup logic against the value
+  // just written.
   private async writeHash(patch: Record<string, string>): Promise<void> {
     if (!this.view) throw new Error("God's Eye View is not open — open it first.");
     const script = `(() => {
@@ -137,12 +168,13 @@ export class GodsEyeViewManager {
       location.hash = params.toString();
     })()`;
     await this.view.webContents.executeJavaScript(script);
+    this.view.webContents.reload();
+    await this.waitForLoad();
   }
 
-  // Drives the already-open globe by setting its own URL hash — the same
-  // real mechanism confirmed from manual use (the app reads location.hash
-  // for camera position on load and on hashchange), not a private API or
-  // anything reverse-engineered beyond what a normal URL already does.
+  // Drives the globe by setting its own URL hash and reloading — the app's
+  // real, documented share-link mechanism (confirmed from its own source),
+  // not a private API or anything reverse-engineered beyond a normal URL.
   async flyTo(target: GodsEyeFlyTo): Promise<void> {
     if (!Number.isFinite(target.lat) || target.lat < -90 || target.lat > 90) throw new Error('Latitude must be a number between -90 and 90.');
     if (!Number.isFinite(target.lon) || target.lon < -180 || target.lon > 180) throw new Error('Longitude must be a number between -180 and 180.');

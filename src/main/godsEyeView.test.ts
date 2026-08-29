@@ -19,10 +19,13 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-const addedViews: Array<{ webContents: { loadURL: ReturnType<typeof vi.fn>; getURL: ReturnType<typeof vi.fn>; executeJavaScript: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> } }> = [];
+const addedViews: Array<{ webContents: { loadURL: ReturnType<typeof vi.fn>; getURL: ReturnType<typeof vi.fn>; executeJavaScript: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; reload: ReturnType<typeof vi.fn>; isLoading: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> } }> = [];
 vi.mock('electron', () => ({
   WebContentsView: class {
-    webContents = { loadURL: vi.fn(async () => {}), getURL: vi.fn(() => ''), executeJavaScript: vi.fn(async () => {}), close: vi.fn() };
+    // isLoading() false + once() a no-op: waitForLoad() resolves
+    // immediately in tests rather than actually waiting on a real page —
+    // reload() itself is still a real, asserted call.
+    webContents = { loadURL: vi.fn(async () => {}), getURL: vi.fn(() => ''), executeJavaScript: vi.fn(async () => {}), close: vi.fn(), reload: vi.fn(), isLoading: vi.fn(() => false), once: vi.fn() };
     constructor() { addedViews.push(this as never); }
   },
 }));
@@ -127,6 +130,57 @@ describe('GodsEyeViewManager', () => {
     expect(script).toContain('"alt":"5000"');
     expect(script).toContain('"heading":"90"');
     expect(script).toContain('"pitch":"-10"');
+  });
+
+  // The real live bug this was built to fix: Robbie's Axiom logged a
+  // "verified" flyTo, but the visible camera never moved. Root cause,
+  // confirmed by reading the real app's own source (src/sharelink.js): it
+  // parses location.hash exactly once at initial mount and has no
+  // hashchange listener at all, so writing the hash on an already-running
+  // page is silently inert. reload() is the only mechanism confirmed to
+  // make it re-apply.
+  it('flyTo forces a real reload after writing the hash, since the app only reads its hash once at initial mount', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await manager.flyTo({ lat: 38.627, lon: -90.1994 });
+    expect(addedViews[0].webContents.reload).toHaveBeenCalledTimes(1);
+    // The hash write must happen BEFORE the reload, or the reload would
+    // just reapply whatever was already there.
+    const hashCallOrder = addedViews[0].webContents.executeJavaScript.mock.invocationCallOrder[0];
+    const reloadCallOrder = addedViews[0].webContents.reload.mock.invocationCallOrder[0];
+    expect(hashCallOrder).toBeLessThan(reloadCallOrder);
+  });
+
+  it('setLayers also forces a reload after writing the hash', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await manager.setLayers(['flights']);
+    expect(addedViews[0].webContents.reload).toHaveBeenCalledTimes(1);
+  });
+
+  // A second real bug found while fixing the first: open_gods_eye_view
+  // re-opening an already-open, already-positioned view used to compare the
+  // view's current URL against the bare URL with strict equality — since a
+  // real flyTo()/setLayers() call leaves a #hash on the URL, that check
+  // always failed and silently reloaded the view back to its bare default,
+  // wiping the camera position and every enabled layer.
+  it('reopening an already-positioned view does not reset its hash back to the bare default URL', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await manager.flyTo({ lat: 38.627, lon: -90.1994 });
+    addedViews[0].webContents.getURL.mockReturnValue('http://localhost:4173/#v=2&lat=38.627&lon=-90.1994');
+    addedViews[0].webContents.loadURL.mockClear();
+    await manager.open(dir);
+    expect(addedViews[0].webContents.loadURL).not.toHaveBeenCalled();
   });
 
   // The real bug this was built to fix: flyTo() used to overwrite the whole
