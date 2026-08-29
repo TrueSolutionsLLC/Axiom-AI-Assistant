@@ -31,7 +31,16 @@ export function SmartHomePanel({onCommand}:{onCommand:(command:string)=>void}){
 
   return <>
     <section className="smart-home-panel"><header><div><span>HOMEBRIDGE / HOMEKIT CONTROL PLANE</span><b>{hb!.connected?'SMART HOME ONLINE':'CONNECTION DEGRADED'}</b></div><i className={hb!.connected?'online':''}/></header>
-      {hb!.error?<div className="smart-home-empty fault"><b>CONNECTION DEGRADED</b><p>{hb!.error}</p></div>:<>
+      {/* connected can be true with an error present at the same time now —
+          Homebridge Config UI X's own accessory cache can genuinely come
+          back empty right after a restart until its Accessories tab has
+          been opened once in a browser (github.com/homebridge/
+          homebridge-config-ui-x#1005, reproduced live). That's real
+          guidance, not a broken connection, so it must not render as the
+          same red "CONNECTION DEGRADED" fault state as an actual failed
+          login/request — hb.connected is the one true signal for that. */}
+      {!hb!.connected?<div className="smart-home-empty fault"><b>CONNECTION DEGRADED</b><p>{hb!.error}</p></div>
+        :hb!.error?<div className="smart-home-empty"><b>NO DEVICES YET</b><p>{hb!.error}</p></div>:<>
         <div className="smart-home-stats"><article><strong>{hb!.accessories.length}</strong><span>ACCESSORIES</span></article>{Object.entries(hb!.counts).slice(0,3).map(([type,count])=><article key={type}><strong>{count}</strong><span>{type.toUpperCase()}</span></article>)}</div>
         <div className="smart-home-entities">{hbAccessories.map((item)=><button key={item.uniqueId} onClick={()=>onCommand(`What is the current state of ${item.name} on Homebridge?`)}><i className={homebridgeTone(item)}/><p><b>{item.name}</b><span>{item.type}</span></p><em>{homebridgeState(item)}</em></button>)}</div>
       </>}

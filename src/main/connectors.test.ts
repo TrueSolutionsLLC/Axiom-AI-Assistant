@@ -170,6 +170,29 @@ describe('Homebridge Config UI X connector',()=>{
     const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
     expect(snapshot.connected).toBe(false);expect(snapshot.error).toContain('Invalid username or password');
   });
+
+  // Real, live, reproduced bug: Robbie's Homebridge dashboard showed dozens
+  // of accessories, but Axiom reported none — confirmed to be a documented
+  // Homebridge Config UI X quirk (github.com/homebridge/homebridge-config-ui-x
+  // issue #1005), not an Axiom bug: after a restart, GET /api/accessories
+  // genuinely returns [] until the Accessories tab has been opened in
+  // Homebridge's own web UI at least once. Login and the request both
+  // succeed — connected must stay true — but a zero-length response should
+  // carry guidance instead of looking like Axiom itself is broken.
+  it('explains the known Homebridge Config UI X empty-cache quirk instead of silently reporting zero devices',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/api/auth/login')?new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200}):new Response('[]',{status:200})));
+    const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
+    expect(snapshot.connected).toBe(true);
+    expect(snapshot.accessories).toEqual([]);
+    expect(snapshot.error).toMatch(/Config UI X|Accessories tab/i);
+  });
+
+  it('does not attach the empty-cache hint when accessories are actually present',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/api/auth/login')?new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200}):new Response(JSON.stringify([{uniqueId:'abc123',serviceName:'Lightbulb',humanType:'Lightbulb',accessoryInformation:{Name:'Office Lamp'},values:{On:false}}]),{status:200})));
+    const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
+    expect(snapshot.connected).toBe(true);
+    expect(snapshot.error).toBeUndefined();
+  });
 });
 
 describe('Ring connector',()=>{
