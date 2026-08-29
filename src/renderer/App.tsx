@@ -86,6 +86,7 @@ const appearancePalette:Record<AppearanceColor,string>={teal:'#20ffd3',green:'#6
 // Hand-maintained, not auto-generated from commits — kept short and honest
 // rather than exhaustive. Bump alongside package.json's version.
 const BEHAVIOR_CHANGELOG:Array<{version:string;summary:string}> = [
+  {version:'3.23.0',summary:"Robbie's ask: build in God's Eye View — his existing, real, open-source (MIT, bilawalsidhu/gods-eye-view) live 3D-globe app — as a built-in Axiom feature, \"some cool ass way,\" not just a shell-out to open it separately. Investigated the real app first rather than guessing: decompiled its actual macOS launcher applet (osadecompile) to find the real launch script, which showed it's a Vite dev server on localhost:4173 with its own OpenAI Realtime voice control — deliberately NOT reused, since Robbie confirmed Axiom should drive it directly instead of running two separate voice pipelines at once. Built a real GodsEyeViewManager (godsEyeView.ts) that owns the external project's server lifecycle (spawns `npm run dev`, polls readiness the same way the app's own real launcher script does) and embeds the running page via Electron's WebContentsView — deliberately not the `<webview>` tag, which Electron's own docs advise against, and not an iframe, since this is a second live local server, not remote content. Axiom drives the camera by writing to the embedded page's real URL hash (`#v=2&lat=...`), the exact format confirmed from watching the real app run — not a private or reverse-engineered API. Two new tools (open_gods_eye_view, gods_eye_fly_to) let Axiom open it and fly the camera by voice or text; UX-wise, per Robbie's own proposed design (approved from a mockup first), clicking either eye on the skull avatar opens it directly — a HUD panel materializes with corner brackets and a scan-sweep, matching the existing Ring-camera panels' particle-burst open/close pattern rather than inventing a new one. Mac-only for now, both the tools and the eye-click trigger — Robbie was explicit that Windows support is a separate, later session once he's back on that machine; gated the same way the existing Mac-only Apple tools (Mail, Notes, Reminders) already are, so nothing is offered where it can't work. Settings gained a project-folder field (defaults to empty — nothing runs until it's set). Verified with real unit tests: the manager's own readiness-polling/error/cleanup logic (mocked fs, spawn, and WebContentsView, not the real external app, which only Robbie's machine has installed), the two tools' keyword-trigger and mac-only gating, and the new store settings field and its runtime-only manager reference. Full build, typecheck, and test suite clean. What's still unverified because it can only be proven on Robbie's real machine: whether the embedded server actually starts and renders correctly end-to-end, and whether real click/voice-driven flyTo actually moves the real globe."},
   {version:'3.22.1',summary:'Robbie put his finger on something real: Axiom "over-explains himself" — does the thing, then narrates which tool ran and how it confirmed that, instead of just saying it\'s done. Traced it to the actual system prompt: baseInstructions is built entirely around verification honesty (\"never claim success unless verified,\" \"report changed files, checks, and checkpoint IDs\") — exactly the right instinct for whether Axiom is ALLOWED to say something worked, but that habit of self-justifying was bleeding into how it talks about ordinary, successful turns too. Rewrote the one function that owns tone specifically (conversationMode, deliberately separate from the verification rules) to say plainly: when something worked, say so in a sentence, don\'t narrate the mechanics unless asked. The detailed, structured breakdown is explicitly kept for exactly where it still belongs — blocked, failed, or genuinely uncertain results, which go through a completely separate, unchanged code path (normalizeActionReply) that still forces the full BLOCKED/NEEDED/COMPLETED SO FAR/NEXT ACTION report regardless of tone. Deliberately not a return to the randomly-rotated "personality" instructions rejected earlier this project for being unpredictable — same consistency principle, just a warmer, less clinical default voice. This is a prompt-wording change with no way to unit test whether it actually reads as more casual in practice — that\'s the next real test, on a real conversation.'},
   {version:'3.22.0',summary:"Three new connectors, requested directly: Stripe, Klaviyo, and WhatsApp Business, joining Google/Shopify/Meta/Dropbox/Homebridge/Ring. Stripe reads recent charges with a restricted, read-only API key — the tool description and the Settings hint both say plainly it can never create a charge, refund, or payout, and the key itself should be scoped that way at the source. Klaviyo reads recent email campaigns; every request sends the API-revision header Klaviyo requires, which is easy to silently omit and get a stale-behavior response instead of an error. WhatsApp sends a real text message through the connected Business number, gated behind the same fresh-approval requirement as Gmail sending — and is honest about a real constraint of Meta's API: a free-form message only works within 24 hours of the other person's last message to that number; outside that window Meta's own API rejects it and demands a pre-approved template, and Axiom surfaces that exact reason from Meta rather than guessing at a fix. All three verified against realistic fake-server responses, including Klaviyo's required header actually being sent and Meta's real 24-hour-window error message passing through unmodified. Declined the phone-calling feature from the same request — real telephony (Twilio) costs money and needs a deliberate decision about AI-call disclosure and recording-consent law that isn't Axiom's to make unilaterally; noted, not built."},
   {version:'3.21.0',summary:"Two direct complaints: replies feel slow (\"he shouldn't have to process the whole question and come back with an answer\"), and Axiom sometimes falsely claims it can't do something. Investigated both for real rather than guessing. (1) Confirmed in the actual request code: OpenAI has streamed token-by-token since 3.12.2, but Anthropic and Gemini never had streaming implemented at all — every reply from either literally waited for the entire response to finish generating server-side before showing a single character, regardless of how fast the model itself was. Built real SSE streaming for both, reusing the same buffer-the-first-forced-round-only pattern already proven for OpenAI (a tool-forced round can interleave stray preamble with the tool call, so only the free-choice final round streams live). Anthropic assembles a tool call's arguments from fragmented JSON deltas only once the block closes, never parses them mid-stream; Gemini concatenates its incremental text chunks into one final part without touching function calls, which arrive whole. Verified against real SSE payloads shaped exactly like each provider's actual streaming format, including one deliberately split mid-event to prove the cross-chunk buffering works, not just whole-event-per-read. (2) The \"I can't do that\" pattern is real, but honestly can't be fully eliminated — it's the long tail of a keyword-matching system encountering a phrasing nobody's hit yet, the same root cause behind every past fix to this exact class of bug (web search, folder creation, Homebridge, desktop control...). What was actually true before this fix: it was invisible. Every occurrence now gets logged with the exact message that triggered it, so the next one is a concrete, fixable diagnostic entry instead of a complaint with no trail — the same approach that actually solved \"AI providers unavailable\" earlier this project, applied to this bug's real shape instead of promising something a regex-based system structurally can't guarantee."},
@@ -485,6 +486,7 @@ export default function App() {
   const [voiceProfileName,setVoiceProfileName]=useState('');
   const [modelDraft, setModelDraft] = useState('gpt-5.6-luna');
   const [workspaceDraft, setWorkspaceDraft] = useState('');
+  const [godsEyeViewPathDraft, setGodsEyeViewPathDraft] = useState('');
   const [automaticBackupsEnabled,setAutomaticBackupsEnabled]=useState(true);
   const [deviceNameDraft,setDeviceNameDraft]=useState('');
   const [syncEnabledDraft,setSyncEnabledDraft]=useState(false);
@@ -557,6 +559,17 @@ export default function App() {
   // .ring-panel / .ring-panel.expanded) — no re-binding the stream, no
   // second video element.
   const [expandedRingCameraId,setExpandedRingCameraId]=useState<number|null>(null);
+  // God's Eye View — a separate live 3D-globe app the user runs locally,
+  // embedded via a native WebContentsView the main process layers directly
+  // over godsEyeContentRef's on-screen box (not an iframe — see
+  // godsEyeView.ts). 'materializing'/'live'/'derezzing' drive the same
+  // particle-burst + CSS transition pattern as the Ring panels above;
+  // status tracks the async open() call independently, since the panel can
+  // be visually open (materializing) while the server is still starting.
+  const [godsEye,setGodsEye]=useState<{phase:'closed'|'materializing'|'live'|'derezzing';status:'loading'|'ready'|'error';error:string}>({phase:'closed',status:'loading',error:''});
+  const godsEyePhaseRef=useRef(godsEye.phase);godsEyePhaseRef.current=godsEye.phase;
+  const godsEyePanelRef=useRef<HTMLDivElement|null>(null);
+  const godsEyeContentRef=useRef<HTMLDivElement|null>(null);
   const ringVideoElsRef=useRef<Map<number,HTMLVideoElement>>(new Map());
   const ringPanelElsRef=useRef<Map<number,HTMLDivElement>>(new Map());
   const ringParticleCanvasRef=useRef<HTMLCanvasElement|null>(null);
@@ -720,7 +733,7 @@ export default function App() {
   useEffect(() => {
     Promise.all([window.axiom.getSettings(), window.axiom.loadHistory(), window.axiom.listMemories(), window.axiom.listGoals(), window.axiom.listPermissions(),window.axiom.loadAudit(), window.axiom.getRuntimeSnapshot(),window.axiom.getDesktopGraph(),window.axiom.getAppInfo()]).then(([nextSettings, history, savedMemories, savedGoals, permissionList,auditItems,runtimeSnapshot,graphSnapshot,appInfo]) => {
       setAppVersion(appInfo.version);
-      setSettings(nextSettings); setProviderDraft(nextSettings.provider); setModelDraft(nextSettings.model); setAutoFailover(nextSettings.autoFailover);setFallbackOrder(nextSettings.fallbackOrder);setCodingProvider(nextSettings.codingProvider);setResearchProvider(nextSettings.researchProvider); setWorkspaceDraft(nextSettings.codingWorkspace);setAutomaticBackupsEnabled(nextSettings.automaticBackupsEnabled);setDeviceNameDraft(nextSettings.deviceName);setSyncEnabledDraft(nextSettings.syncEnabled);setSyncFolderDraft(nextSettings.syncFolder); setSpeechProviderDraft(nextSettings.speechProvider); setVoiceIdDraft(nextSettings.elevenLabsVoiceId); setVoiceNameDraft(nextSettings.elevenLabsVoiceName); setElevenModelDraft(nextSettings.elevenLabsModel); setVoiceStability(nextSettings.voiceStability); setVoiceSimilarity(nextSettings.voiceSimilarity); setVoiceStyle(nextSettings.voiceStyle); setVoiceSpeed(nextSettings.voiceSpeed);setMouthOffsetMs(nextSettings.mouthCalibration.offsetMs);setMouthGain(nextSettings.mouthCalibration.gain);setMouthAttack(nextSettings.mouthCalibration.attack);setMouthRelease(nextSettings.mouthCalibration.release);setStartMicrophoneOn(nextSettings.startMicrophoneOn);setUpdateFeedDraft(nextSettings.updateFeedUrl||'');setMicrophoneIdDraft(nextSettings.preferredMicrophoneId);setMicrophoneLabelDraft(nextSettings.preferredMicrophoneLabel);setMicrophoneNoiseFloor(nextSettings.microphoneNoiseFloor);setMicrophoneSpeechThreshold(nextSettings.microphoneSpeechThreshold);setSpeakerLockEnabled(nextSettings.speakerLockEnabled);setSpeakerName(nextSettings.speakerProfiles?.find((profile)=>profile.primary)?.name||''); setMessages(history);
+      setSettings(nextSettings); setProviderDraft(nextSettings.provider); setModelDraft(nextSettings.model); setAutoFailover(nextSettings.autoFailover);setFallbackOrder(nextSettings.fallbackOrder);setCodingProvider(nextSettings.codingProvider);setResearchProvider(nextSettings.researchProvider); setWorkspaceDraft(nextSettings.codingWorkspace);setGodsEyeViewPathDraft(nextSettings.godsEyeViewPath);setAutomaticBackupsEnabled(nextSettings.automaticBackupsEnabled);setDeviceNameDraft(nextSettings.deviceName);setSyncEnabledDraft(nextSettings.syncEnabled);setSyncFolderDraft(nextSettings.syncFolder); setSpeechProviderDraft(nextSettings.speechProvider); setVoiceIdDraft(nextSettings.elevenLabsVoiceId); setVoiceNameDraft(nextSettings.elevenLabsVoiceName); setElevenModelDraft(nextSettings.elevenLabsModel); setVoiceStability(nextSettings.voiceStability); setVoiceSimilarity(nextSettings.voiceSimilarity); setVoiceStyle(nextSettings.voiceStyle); setVoiceSpeed(nextSettings.voiceSpeed);setMouthOffsetMs(nextSettings.mouthCalibration.offsetMs);setMouthGain(nextSettings.mouthCalibration.gain);setMouthAttack(nextSettings.mouthCalibration.attack);setMouthRelease(nextSettings.mouthCalibration.release);setStartMicrophoneOn(nextSettings.startMicrophoneOn);setUpdateFeedDraft(nextSettings.updateFeedUrl||'');setMicrophoneIdDraft(nextSettings.preferredMicrophoneId);setMicrophoneLabelDraft(nextSettings.preferredMicrophoneLabel);setMicrophoneNoiseFloor(nextSettings.microphoneNoiseFloor);setMicrophoneSpeechThreshold(nextSettings.microphoneSpeechThreshold);setSpeakerLockEnabled(nextSettings.speakerLockEnabled);setSpeakerName(nextSettings.speakerProfiles?.find((profile)=>profile.primary)?.name||''); setMessages(history);
       setAppearance(normalizeRendererAppearance(nextSettings.appearance));
       setMemories(savedMemories); setGoals(savedGoals); setPermissions(permissionList);setAudit(auditItems);setRuntime(runtimeSnapshot);setDesktopGraph(graphSnapshot);
       if (!nextSettings.hasSelectedAIKey) setSettingsOpen(true);
@@ -1511,6 +1524,42 @@ export default function App() {
     for(const cameraId of ringViews.keys())trackRingConnector(cameraId,550);
   },[ringViews.size]);
 
+  // Reports godsEyeContentRef's real on-screen box to the main process so
+  // its native WebContentsView (drawn behind/over this exact rect, not a
+  // DOM child) lines up with the placeholder. Only needed while a panel is
+  // actually up — a closed panel has nothing to align.
+  useEffect(()=>{
+    if(godsEye.phase==='closed')return;
+    const report=()=>{
+      const el=godsEyeContentRef.current;if(!el)return;
+      const rect=el.getBoundingClientRect();
+      void window.axiom.setGodsEyeViewBounds({x:rect.left,y:rect.top,width:rect.width,height:rect.height}).catch(()=>{});
+    };
+    report();
+    const observer=new ResizeObserver(report);
+    if(godsEyeContentRef.current)observer.observe(godsEyeContentRef.current);
+    window.addEventListener('resize',report);
+    return()=>{observer.disconnect();window.removeEventListener('resize',report);};
+  },[godsEye.phase]);
+  const openGodsEye=async()=>{
+    if(godsEyePhaseRef.current!=='closed')return;
+    setGodsEye({phase:'materializing',status:'loading',error:''});
+    requestAnimationFrame(()=>{const el=godsEyePanelRef.current;if(el)ringParticleBurst(el.getBoundingClientRect(),'in');});
+    try{
+      const result=await window.axiom.openGodsEyeView();
+      if(!result.ready){setGodsEye({phase:'materializing',status:'error',error:result.error||"God's Eye View could not be started."});return;}
+      setGodsEye({phase:'live',status:'ready',error:''});
+    }catch(reason){
+      setGodsEye({phase:'materializing',status:'error',error:reason instanceof Error?reason.message:String(reason)});
+    }
+  };
+  const closeGodsEye=()=>{
+    if(godsEyePhaseRef.current==='closed')return;
+    const el=godsEyePanelRef.current;if(el)ringParticleBurst(el.getBoundingClientRect(),'out');
+    setGodsEye((current)=>({...current,phase:'derezzing'}));
+    void window.axiom.closeGodsEyeView().catch(()=>{});
+    window.setTimeout(()=>setGodsEye({phase:'closed',status:'loading',error:''}),500);
+  };
   const updateRingView=(cameraId:number,patch:Partial<RingViewState>)=>{
     setRingViews((current)=>{
       const existing=current.get(cameraId);if(!existing)return current;
@@ -1786,7 +1835,7 @@ export default function App() {
 
   const saveSettings = async (close = false) => {
     try {
-      const next = await window.axiom.saveSettings({ appearance, provider:providerDraft, model: modelDraft, autoFailover, fallbackOrder,codingProvider,researchProvider, openAIKey: keyDraft || undefined, anthropicKey:anthropicKeyDraft||undefined, geminiKey:geminiKeyDraft||undefined, speechProvider:speechProviderDraft, elevenLabsKey:elevenKeyDraft||undefined, elevenLabsVoiceId:voiceIdDraft, elevenLabsVoiceName:voiceNameDraft, elevenLabsModel:elevenModelDraft, voiceStability, voiceSimilarity, voiceStyle, voiceSpeed,startMicrophoneOn,updateFeedUrl:updateFeedDraft,preferredMicrophoneId:microphoneIdDraft,preferredMicrophoneLabel:microphoneLabelDraft,microphoneNoiseFloor,microphoneSpeechThreshold,speakerLockEnabled, codingWorkspace: workspaceDraft,automaticBackupsEnabled,deviceName:deviceNameDraft,syncEnabled:syncEnabledDraft,syncFolder:syncFolderDraft,syncPassphrase:syncPassphraseDraft||undefined,ownerOverridePhrase:ownerOverrideDraft||undefined });
+      const next = await window.axiom.saveSettings({ appearance, provider:providerDraft, model: modelDraft, autoFailover, fallbackOrder,codingProvider,researchProvider, openAIKey: keyDraft || undefined, anthropicKey:anthropicKeyDraft||undefined, geminiKey:geminiKeyDraft||undefined, speechProvider:speechProviderDraft, elevenLabsKey:elevenKeyDraft||undefined, elevenLabsVoiceId:voiceIdDraft, elevenLabsVoiceName:voiceNameDraft, elevenLabsModel:elevenModelDraft, voiceStability, voiceSimilarity, voiceStyle, voiceSpeed,startMicrophoneOn,updateFeedUrl:updateFeedDraft,preferredMicrophoneId:microphoneIdDraft,preferredMicrophoneLabel:microphoneLabelDraft,microphoneNoiseFloor,microphoneSpeechThreshold,speakerLockEnabled, codingWorkspace: workspaceDraft,godsEyeViewPath:godsEyeViewPathDraft,automaticBackupsEnabled,deviceName:deviceNameDraft,syncEnabled:syncEnabledDraft,syncFolder:syncFolderDraft,syncPassphrase:syncPassphraseDraft||undefined,ownerOverridePhrase:ownerOverrideDraft||undefined });
       setAppearance(next.appearance);
       setSettings(next);setMouthOffsetMs(next.mouthCalibration.offsetMs);setMouthGain(next.mouthCalibration.gain);setMouthAttack(next.mouthCalibration.attack);setMouthRelease(next.mouthCalibration.release); setKeyDraft('');setAnthropicKeyDraft('');setGeminiKeyDraft('');setElevenKeyDraft('');setSyncPassphraseDraft('');setOwnerOverrideDraft('');setSyncStatus(await window.axiom.getSyncStatus()); setSettingsStatus('Settings saved securely.'); if(close)setSettingsOpen(false); setError(''); dispatch({ type: 'mode', mode: 'success' });
       void window.axiom.lastSettingsSnapshot().then(setSettingsSnapshot);
@@ -2011,7 +2060,21 @@ export default function App() {
         <button onClick={()=>setActiveView('RUNTIME')}><small>ACTIVE WORK</small><b><ScrambleValue value={`${runtime?.metrics.activeTasks??0} TASKS`}/></b><span>⌁</span></button>
       </div>
       <canvas ref={cognitionCanvasRef} className="cognition-field" width={1000} height={1000} aria-hidden="true"/>
-      <ModdedSkullAvatar mode={visual.mode} energy={visual.energy} tracking={tracking.pose} mouth={mouth} appearance={appearance} />
+      {godsEye.phase!=='closed'&&<div ref={godsEyePanelRef} className={`gods-eye-panel ${godsEye.phase}`}>
+        <div className="gods-eye-frame">
+          {Array.from({length:4},(_,index)=><span key={index} className={`gods-eye-bracket bracket-${index}`} aria-hidden="true"/>)}
+          <span className="gods-eye-scan-sweep" aria-hidden="true"/>
+          <header>
+            <div><i/><b>GOD'S EYE VIEW</b><span>{godsEye.status==='ready'?'LIVE FEED':godsEye.status==='error'?'UPLINK FAILED':'INITIALIZING'}</span></div>
+            <button onClick={closeGodsEye} aria-label="Close God's Eye View">×</button>
+          </header>
+          <div className="gods-eye-body" ref={godsEyeContentRef}>
+            {godsEye.status==='loading'&&<div className="gods-eye-overlay"><span className="gods-eye-spinner" aria-hidden="true"/><b>ACQUIRING SATELLITE UPLINK…</b><small>Starting the local server — first launch can take up to 20 seconds.</small></div>}
+            {godsEye.status==='error'&&<div className="gods-eye-overlay gods-eye-error"><b>UPLINK FAILED</b><small>{godsEye.error}</small></div>}
+          </div>
+        </div>
+      </div>}
+      <ModdedSkullAvatar mode={visual.mode} energy={visual.energy} tracking={tracking.pose} mouth={mouth} appearance={appearance} onEyesClick={()=>void openGodsEye()} />
       <div ref={ringSkullAnchorRef} className="ring-skull-anchor" aria-hidden="true"/>
       {(screenCapture||cameraCapture) && <div className="screen-attachment"><img src={(cameraCapture||screenCapture)!.dataUrl} alt="Attached visual capture"/><div><b>{cameraCapture?'CAMERA ATTACHED':'SCREEN ATTACHED'}</b><span>{(cameraCapture||screenCapture)!.width} × {(cameraCapture||screenCapture)!.height} / ONE REQUEST</span></div><button onClick={()=>{setScreenCapture(null);setCameraCapture(null);}} aria-label="Remove visual attachment">×</button></div>}
       <div className="identity-line"><span className={latest?.role==='assistant'&&!streamingText&&!busy&&latest.tone?`reply-tone-${latest.tone}`:undefined}>{recording ? 'LISTENING — HANDS FREE' : voiceProcessing ? 'UNDERSTANDING VOICE' : streamingText ? visual.mode === 'speaking' ? 'LIVE VOICE STREAM' : 'RESPONDING' : latest?.role==='assistant'&&latest.tone==='concern'&&!busy?'AXIOM FLAGGED A CONCERN':latest?.role==='assistant'&&latest.tone==='uncertain'&&!busy?'AXIOM IS UNCERTAIN':statusText}</span></div>
@@ -2112,6 +2175,8 @@ export default function App() {
           </SettingsSection>
           <SettingsSection id="settings-control" icon={settingSections[6].icon} title={settingSections[6].label} summary={settingSections[6].summary} open={openSettingsSection==='settings-control'} onToggle={()=>setOpenSettingsSection((current)=>current==='settings-control'?null:'settings-control')}>
           <label>Coding workspace<input value={workspaceDraft} onChange={(event) => setWorkspaceDraft(event.target.value)} placeholder={settings?.platform==='macos'?'/Users/you/Documents/Axiom Projects':'C:\\Users\\You\\Documents\\Axiom Projects'} /></label>
+          <label>God's Eye View project folder <em>{settings?.platform==='macos'?'MAC ONLY — FOR NOW':'AVAILABLE ON MAC ONLY'}</em><input value={godsEyeViewPathDraft} onChange={(event)=>setGodsEyeViewPathDraft(event.target.value)} placeholder="/Users/you/Desktop/gods-eye-view" /></label>
+          <p className="context-note">Click either eye on the skull to open your God's Eye View globe embedded in Axiom's window. Windows support is planned but not built yet.</p>
           <label className="toggle-line microphone-startup"><input type="checkbox" checked={automaticBackupsEnabled} onChange={(event)=>setAutomaticBackupsEnabled(event.target.checked)}/><span><b>DAILY VERIFIED BACKUPS</b><small>After 2:00 AM, the background runtime writes one integrity-checked Axiom backup per day to your Desktop.</small></span></label>
           {settingsSnapshot&&<div className="settings-revert-row"><span><b>LAST CHANGE</b> {settingsSnapshot.label} · {new Date(settingsSnapshot.at).toLocaleString([], {hour:'2-digit',minute:'2-digit'})}</span><button className="secondary" disabled={revertingSettings} onClick={()=>void revertSettings()}>{revertingSettings?'REVERTING…':'REVERT'}</button></div>}
           </SettingsSection>

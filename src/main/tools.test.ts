@@ -660,3 +660,58 @@ describe('approval-phrase code extraction',()=>{
     expect(approvalCodeFromMessage('AX-B4DD03')).toBeUndefined();
   });
 });
+
+describe("God's Eye View integration", () => {
+  // Mac-only for now — the real install and Windows support decision are
+  // both Robbie's; toolAvailable() gates these two tools out entirely on
+  // non-macOS so they're never offered where they can't actually work.
+  it.skipIf(process.platform!=='darwin')('offers open_gods_eye_view for the app\'s own name, not the bare word "eye"', () => {
+    expect(providerTools("Open God's Eye View").some((tool)=>tool.name==='open_gods_eye_view')).toBe(true);
+    expect(providerTools('Open gods eye view please').some((tool)=>tool.name==='open_gods_eye_view')).toBe(true);
+    // "eye(s)" alone already means the companion-appearance control — must
+    // not collide.
+    expect(providerTools('Make your eyes blue').some((tool)=>tool.name==='open_gods_eye_view')).toBe(false);
+  });
+  it.skipIf(process.platform!=='darwin')('offers gods_eye_fly_to only alongside a movement verb or coordinates', () => {
+    expect(providerTools("Fly the God's Eye View to Tokyo").some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
+    expect(providerTools('Zoom in on latitude 35, longitude 139 on the globe').some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
+    expect(providerTools("Open God's Eye View").some((tool)=>tool.name==='gods_eye_fly_to')).toBe(false);
+  });
+  it.skipIf(process.platform==='darwin')('is unavailable on non-macOS platforms even when the phrase matches', () => {
+    expect(providerTools("Open God's Eye View").some((tool)=>tool.name==='open_gods_eye_view')).toBe(false);
+    expect(capabilityManifest().some((item)=>item.name==='open_gods_eye_view')).toBe(false);
+  });
+  it.skipIf(process.platform!=='darwin')('open_gods_eye_view fails clearly when the window/manager is not ready', async () => {
+    const store={getGodsEyeViewManager:()=>undefined,godsEyeViewPath:()=>'/Users/robbie/Desktop/gods-eye-view'} as unknown as AppStore;
+    const result=await executeTool('open_gods_eye_view',{},store);
+    expect(result.event.status).toBe('failed');
+    expect(result.output).toContain('not ready');
+  });
+  it.skipIf(process.platform!=='darwin')('open_gods_eye_view surfaces the manager\'s own error (e.g. unset path) rather than throwing', async () => {
+    const manager={open:async()=>({ready:false,url:'http://localhost:4173/',error:'Set the project folder in Settings first.'})};
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
+    const result=await executeTool('open_gods_eye_view',{},store);
+    expect(result.event.status).toBe('failed');
+    expect(result.output).toContain('Set the project folder in Settings first.');
+  });
+  it.skipIf(process.platform!=='darwin')('open_gods_eye_view reports success from the manager\'s real result', async () => {
+    const manager={open:async()=>({ready:true,url:'http://localhost:4173/'})};
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>'/Users/robbie/Desktop/gods-eye-view'} as unknown as AppStore;
+    const result=await executeTool('open_gods_eye_view',{},store);
+    expect(result.event.status).toBe('verified');
+    expect(result.output).toContain('4173');
+  });
+  it.skipIf(process.platform!=='darwin')('gods_eye_fly_to requires the view to already be open', async () => {
+    const store={getGodsEyeViewManager:()=>undefined,godsEyeViewPath:()=>''} as unknown as AppStore;
+    const result=await executeTool('gods_eye_fly_to',{lat:35.6,lon:139.7},store);
+    expect(result.event.status).toBe('failed');
+  });
+  it.skipIf(process.platform!=='darwin')('gods_eye_fly_to forwards exact coordinates to the manager', async () => {
+    let received:unknown;
+    const manager={flyTo:async(target:unknown)=>{received=target;}};
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
+    const result=await executeTool('gods_eye_fly_to',{lat:35.6,lon:139.7,alt:5000},store);
+    expect(result.event.status).toBe('verified');
+    expect(received).toMatchObject({lat:35.6,lon:139.7,alt:5000});
+  });
+});

@@ -193,6 +193,7 @@ export interface PublicSettings {
   unreadableCredentials: string[];
   appearance: AppearanceSettings;
   codingWorkspace: string;
+  godsEyeViewPath: string;
   platform:AxiomPlatform;
   platformLabel:string;
   secureStorageLabel:string;
@@ -253,6 +254,7 @@ export interface SaveSettingsRequest {
   microphoneCalibratedAt?:string;
   speakerLockEnabled?:boolean;
   codingWorkspace?: string;
+  godsEyeViewPath?: string;
   deviceName?:string;
   syncEnabled?:boolean;
   syncFolder?:string;
@@ -590,6 +592,18 @@ export interface DesktopApi {
   onRingLiveViewEvent(callback:(event:RingLiveViewEvent)=>void):()=>void;
   listMediaArtifacts():Promise<MediaArtifact[]>;
   showCursorGuide(x:number,y:number,label:string,durationMs?:number):Promise<{shown:true;x:number;y:number;label:string;durationMs:number}>;
+  /** Ensures the local God's Eye View server is running (starting it if not)
+   * and reports the URL to embed. Never throws on a real, expected failure
+   * (project not found, npm missing) — returns a message instead so the
+   * panel can show it rather than the whole request rejecting. */
+  openGodsEyeView():Promise<{ready:boolean;url:string;error?:string}>;
+  /** Reports where the panel's placeholder element actually sits on screen
+   * (in device pixels, window-relative) so the real embedded view — a
+   * WebContentsView layered behind the transparent placeholder, not an
+   * iframe — can be positioned and resized to match exactly. Called
+   * whenever the placeholder's layout changes while the panel is open. */
+  setGodsEyeViewBounds(bounds:{x:number;y:number;width:number;height:number}):Promise<void>;
+  closeGodsEyeView():Promise<void>;
   getRuntimeSnapshot(): Promise<RuntimeSnapshot>;
   addCommitment(title: string, dueAt?: string): Promise<CommitmentItem>;
   resolveCommitment(id: string, status: 'fulfilled' | 'cancelled'): Promise<RuntimeSnapshot>;

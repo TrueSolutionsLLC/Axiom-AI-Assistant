@@ -20,6 +20,7 @@ import { getSystemTelemetrySnapshot } from './systemTelemetry';
 import { ReliabilityFabric } from './reliabilityFabric';
 import { checkForUpdate, downloadVerifiedUpdate } from './updater';
 import { RingLiveViewSessions } from './ringLiveView';
+import { GodsEyeViewManager } from './godsEyeView';
 
 // A dedicated profile keeps renderer QA isolated from the user's real Axiom
 // identity, credentials, memory, and single-instance lock.
@@ -32,6 +33,7 @@ const ringSessions=new RingLiveViewSessions(()=>connectors.ringTicket(),(event)=
 const mediaService=new MediaService(store);
 const reliability=new ReliabilityFabric();
 let mainWindow: BrowserWindow | null = null;
+let godsEyeView: GodsEyeViewManager | null = null;
 
 // Keyword-gated tool offering (see providerTools() in tools.ts) will always
 // have a long tail of real phrasings a hand-written regex never anticipated
@@ -187,7 +189,10 @@ function createWindow(): void {
     mainWindow?.hide();
     showBackgroundNotification('AXIOM REMAINS ACTIVE', 'Approved background work is continuing. Use the tray icon to reopen Axiom or quit it.');
   });
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => { mainWindow = null; godsEyeView = null; store.setGodsEyeViewManager(undefined); });
+
+  godsEyeView = new GodsEyeViewManager(mainWindow);
+  store.setGodsEyeViewManager(godsEyeView);
 
   if (process.env.VITE_DEV_SERVER_URL) void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else void mainWindow.loadURL('axiom://app/index.html');
@@ -325,6 +330,9 @@ function registerIpc(): void {
   ipcMain.handle('ring:liveview-close',(_event,liveSessionId:string)=>{writeDiagnostic('ring-liveview-close',{liveSessionId});ringSessions.close(liveSessionId);});
   ipcMain.handle('media:list',()=>store.mediaArtifacts());
   ipcMain.handle('cursor-guide:show',(_event,x:number,y:number,label:string,durationMs?:number)=>showCursorGuide(Number(x),Number(y),String(label||'LOOK HERE'),Number(durationMs)||5000));
+  ipcMain.handle('gods-eye:open',async()=>{if(!godsEyeView)throw new Error('Axiom window is not ready.');return godsEyeView.open(store.godsEyeViewPath());});
+  ipcMain.handle('gods-eye:set-bounds',(_event,bounds:{x:number;y:number;width:number;height:number})=>{godsEyeView?.setBounds(bounds);});
+  ipcMain.handle('gods-eye:close',()=>{godsEyeView?.close();});
   ipcMain.handle('voice-profile:save',(_event,name:string)=>store.saveVoiceProfile(name));
   ipcMain.handle('voice-profile:activate',(_event,id:string)=>store.activateVoiceProfile(id));
   ipcMain.handle('voice-profile:delete',(_event,id:string)=>store.deleteVoiceProfile(id));
@@ -555,7 +563,7 @@ app.whenReady().then(() => {
 app.on('second-instance', showMainWindow);
 
 app.on('child-process-gone',(_event,details)=>writeDiagnostic('child-process-gone',details));
-app.on('before-quit',()=>{isQuitting=true;syncManager.stop();backgroundRuntime.stop();ringSessions.closeAll();tray?.destroy();tray=null;for(const pending of pendingCameraCaptures.values()){clearTimeout(pending.timer);pending.reject(new Error('Axiom is closing.'));}pendingCameraCaptures.clear();});
+app.on('before-quit',()=>{isQuitting=true;syncManager.stop();backgroundRuntime.stop();ringSessions.closeAll();godsEyeView?.destroy();tray?.destroy();tray=null;for(const pending of pendingCameraCaptures.values()){clearTimeout(pending.timer);pending.reject(new Error('Axiom is closing.'));}pendingCameraCaptures.clear();});
 process.on('uncaughtException',(error)=>{writeDiagnostic('uncaught-exception',{name:error.name,message:error.message,stack:error.stack});setImmediate(()=>app.exit(1));});
 process.on('unhandledRejection',(reason)=>writeDiagnostic('unhandled-rejection',{message:reason instanceof Error?reason.message:String(reason),stack:reason instanceof Error?reason.stack:undefined}));
 

@@ -421,3 +421,40 @@ describe('semantic memory — real embeddings, not stubbed vectors',()=>{
     expect(unrelated!.similarity).toBeLessThan(0.7);
   },15_000);
 });
+
+describe("God's Eye View settings", () => {
+  beforeEach(() => {
+    machineKey = 'machine-A';
+    userData = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-store-'));
+  });
+
+  it('persists the project path and returns it from the getter and public settings', () => {
+    const store = newStore();
+    expect(store.godsEyeViewPath()).toBe('');
+    saveKeys(store, { godsEyeViewPath: '/Users/robbie/Desktop/gods-eye-view' });
+    expect(store.godsEyeViewPath()).toBe('/Users/robbie/Desktop/gods-eye-view');
+    expect(store.publicSettings().godsEyeViewPath).toBe('/Users/robbie/Desktop/gods-eye-view');
+  });
+
+  it('trims whitespace and survives a reload from disk', () => {
+    const origin = newStore();
+    saveKeys(origin, { godsEyeViewPath: '  /Users/robbie/Desktop/gods-eye-view  ' });
+    expect(origin.godsEyeViewPath()).toBe('/Users/robbie/Desktop/gods-eye-view');
+    const reloaded = newStore();
+    expect(reloaded.godsEyeViewPath()).toBe('/Users/robbie/Desktop/gods-eye-view');
+  });
+
+  // Runtime-only reference — never persisted, never touches disk — so
+  // gods_eye_fly_to (tools.ts) can reach the live GodsEyeViewManager the main
+  // process owns through the same `store` parameter every tool already
+  // receives, without tools.ts and main.ts importing each other.
+  it('holds a runtime-only manager reference that does not persist to disk', () => {
+    const store = newStore();
+    expect(store.getGodsEyeViewManager()).toBeUndefined();
+    const fakeManager = { open: async () => ({ ready: true, url: 'http://localhost:4173/' }) } as never;
+    store.setGodsEyeViewManager(fakeManager);
+    expect(store.getGodsEyeViewManager()).toBe(fakeManager);
+    store.setGodsEyeViewManager(undefined);
+    expect(store.getGodsEyeViewManager()).toBeUndefined();
+  });
+});

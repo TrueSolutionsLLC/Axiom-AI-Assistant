@@ -7,6 +7,7 @@ import type { AgentItem, AgentRunItem, AIProvider, AppearanceColor, AppearanceSe
 import { actionEvidence, stableActionDigest } from './runtimeCore';
 import { normalizeMemoryRecord, rankMemoryRecords, cosineSimilarity, SEMANTIC_INCLUSION_THRESHOLD } from './memoryCore';
 import { embedText } from './embeddings';
+import type { GodsEyeViewManager } from './godsEyeView';
 import { ingestDesktopToolResult, queryDesktopGraph, snapshotDesktopGraph } from './desktopGraph';
 import { defaultDeviceName, platformProfile } from './platform';
 import { advanceSchedule, normalizeSchedule, scheduleIsDue } from './schedulerCore';
@@ -63,6 +64,7 @@ interface StoredData {
   knownPeople:KnownPerson[];
   appearance: AppearanceSettings;
   codingWorkspace: string;
+  godsEyeViewPath: string;
   permissionOverrides:Record<string,boolean>;
   audit:AuditItem[];
   runtimeTasks:RuntimeTask[];
@@ -130,7 +132,7 @@ function seedSelfCorrections():SelfCorrection[]{
     {id:crypto.randomUUID(),pattern:'the owner is not recognized by camera/voice and needs a way back into trusted mode',mistake:'There was no fallback when biometrics genuinely failed (bad angle, lighting, or an enrollment gap) other than getting the camera to cooperate — and a spoken claimed name was correctly never accepted as proof, since that is exactly what an intruder would also say.',fix:'Added a real secret (scrypt-hashed owner override phrase, rate-limited) as the deliberate way back in — distinct from a name, which is public information.',createdAt:now},
   ];
 }
-const defaults = (): StoredData => { const now=new Date().toISOString();return ({ model: 'gpt-5.6-luna', provider:'openai', providerModels:{openai:'gpt-5.6-luna',anthropic:'claude-sonnet-5',gemini:'gemini-3.6-flash'}, autoFailover:true, fallbackOrder:['openai','anthropic','gemini'],codingProvider:'openai',researchProvider:'openai', speechProvider:'openai', elevenLabsVoiceId:'JBFqnCBsd6RMkjVDRZzb', elevenLabsVoiceName:'George', elevenLabsModel:'eleven_flash_v2_5', voiceStability:.5, voiceSimilarity:.78, voiceStyle:.18, voiceSpeed:1.12,mouthCalibrations:{},startMicrophoneOn:true,updateFeedUrl:'',updateChannel:'stable',preferredMicrophoneId:'',preferredMicrophoneLabel:'System default',microphoneNoiseFloor:.006,microphoneSpeechThreshold:.02,speakerLockEnabled:true,voiceProfiles:[],activeVoiceProfileId:'',speakerProfiles:[], history: [], memories: [], goals: [], skills: [], agents: [],agentRuns:[],todos:[],monitors:[],backgroundEvents:[],knownPeople:[], appearance: defaultAppearance(), codingWorkspace: '',permissionOverrides:{},audit:[],runtimeTasks:[],commitments:[],evidence:[],approvals:[],desktopEntities:[],desktopRelations:[],desktopObservations:[],deviceId:crypto.randomUUID(),deviceName:defaultDeviceName(),deviceFirstSeenAt:now,deviceLastActiveAt:now,syncEnabled:false,syncFolder:'',syncPeers:[],appearanceUpdatedAt:now,syncTombstones:[],automaticBackupsEnabled:true,connectors:[],mediaArtifacts:[],ownerOverrideFailures:0,selfCorrections:seedSelfCorrections() }); };
+const defaults = (): StoredData => { const now=new Date().toISOString();return ({ model: 'gpt-5.6-luna', provider:'openai', providerModels:{openai:'gpt-5.6-luna',anthropic:'claude-sonnet-5',gemini:'gemini-3.6-flash'}, autoFailover:true, fallbackOrder:['openai','anthropic','gemini'],codingProvider:'openai',researchProvider:'openai', speechProvider:'openai', elevenLabsVoiceId:'JBFqnCBsd6RMkjVDRZzb', elevenLabsVoiceName:'George', elevenLabsModel:'eleven_flash_v2_5', voiceStability:.5, voiceSimilarity:.78, voiceStyle:.18, voiceSpeed:1.12,mouthCalibrations:{},startMicrophoneOn:true,updateFeedUrl:'',updateChannel:'stable',preferredMicrophoneId:'',preferredMicrophoneLabel:'System default',microphoneNoiseFloor:.006,microphoneSpeechThreshold:.02,speakerLockEnabled:true,voiceProfiles:[],activeVoiceProfileId:'',speakerProfiles:[], history: [], memories: [], goals: [], skills: [], agents: [],agentRuns:[],todos:[],monitors:[],backgroundEvents:[],knownPeople:[], appearance: defaultAppearance(), codingWorkspace: '', godsEyeViewPath: '',permissionOverrides:{},audit:[],runtimeTasks:[],commitments:[],evidence:[],approvals:[],desktopEntities:[],desktopRelations:[],desktopObservations:[],deviceId:crypto.randomUUID(),deviceName:defaultDeviceName(),deviceFirstSeenAt:now,deviceLastActiveAt:now,syncEnabled:false,syncFolder:'',syncPeers:[],appearanceUpdatedAt:now,syncTombstones:[],automaticBackupsEnabled:true,connectors:[],mediaArtifacts:[],ownerOverrideFailures:0,selfCorrections:seedSelfCorrections() }); };
 
 const recordTime=(item:unknown):number=>{const record=item as {createdAt?:string;updatedAt?:string;lastRunAt?:string;at?:string};return Date.parse(record.updatedAt||record.lastRunAt||record.createdAt||record.at||'')||0;};
 function mergeRecords<T extends {id:string}>(local:T[],remote:T[],limit:number):T[]{const map=new Map<string,T>();for(const item of [...local,...remote]){const current=map.get(item.id);if(!current||recordTime(item)>=recordTime(current))map.set(item.id,item);}return[...map.values()].sort((a,b)=>recordTime(a)-recordTime(b)).slice(-limit);}
@@ -145,6 +147,13 @@ export class AppStore {
   private data: StoredData = defaults();
   private file = '';
   private readonly sessionId=crypto.randomUUID();
+  // Runtime-only reference, never persisted — tools.ts runs in the same main
+  // process as the window that owns this, so this is just how a tool (which
+  // only ever receives `store` as context) reaches it, without tools.ts and
+  // main.ts importing each other.
+  private godsEyeViewManagerRef?:GodsEyeViewManager;
+  setGodsEyeViewManager(manager:GodsEyeViewManager|undefined):void{this.godsEyeViewManagerRef=manager;}
+  getGodsEyeViewManager():GodsEyeViewManager|undefined{return this.godsEyeViewManagerRef;}
 
   /** Writes to the same diagnostics log main.ts's writeDiagnostic() uses, so
    * a data-loss event during store init shows up in one place instead of
@@ -261,6 +270,7 @@ export class AppStore {
       unreadableCredentials: this.unreadableCredentials(),
       appearance: { ...this.data.appearance },
       codingWorkspace: this.data.codingWorkspace || path.join(app.getPath('documents'), 'Axiom Projects'),
+      godsEyeViewPath: this.data.godsEyeViewPath || '',
       platform:platform.id,
       platformLabel:platform.label,
       secureStorageLabel:platform.secureStorageLabel,
@@ -295,6 +305,15 @@ export class AppStore {
       const roots = ['desktop', 'documents', 'downloads'].map((name) => path.resolve(app.getPath(name as 'desktop' | 'documents' | 'downloads')));
       if (!roots.some((root) => candidate === root || candidate.startsWith(`${root}${path.sep}`))) throw new Error('The coding workspace must be inside Desktop, Documents, or Downloads.');
       this.data.codingWorkspace = candidate;
+    }
+    if (input.godsEyeViewPath !== undefined) {
+      // No location restriction like codingWorkspace — this points at an
+      // existing external project the user already has somewhere on disk,
+      // not a folder Axiom writes into, so it isn't scoped the same way.
+      // Real validation (does it exist, does it look like the right
+      // project) happens at launch time, not here, since a path typed
+      // mid-edit shouldn't throw on every keystroke.
+      this.data.godsEyeViewPath = input.godsEyeViewPath.trim();
     }
     if (input.clearOpenAIKey) delete this.data.encryptedOpenAIKey;
     if (input.openAIKey?.trim()) {
@@ -648,6 +667,7 @@ export class AppStore {
   desktopGraph():DesktopGraphSnapshot{return snapshotDesktopGraph({entities:this.data.desktopEntities,relations:this.data.desktopRelations,observations:this.data.desktopObservations});}
   queryDesktopObjects(query:string,limit=20):DesktopEntity[]{return queryDesktopGraph({entities:this.data.desktopEntities,relations:this.data.desktopRelations,observations:this.data.desktopObservations},query,limit);}
   codingWorkspace(): string { return this.data.codingWorkspace || path.join(app.getPath('documents'), 'Axiom Projects'); }
+  godsEyeViewPath(): string { return this.data.godsEyeViewPath || ''; }
   permissionEnabled(id:string,defaultValue=true):boolean{return this.data.permissionOverrides[id]??defaultValue;}
   setPermission(id:string,enabled:boolean):void{this.data.permissionOverrides[id]=enabled;this.flush();}
   audit():AuditItem[]{return[...this.data.audit].reverse();}

@@ -650,6 +650,12 @@ const registry: ToolDefinition[] = [
     async execute(args){return{output:JSON.stringify(await showCursorGuide(Number(args.x),Number(args.y),String(args.label||'LOOK HERE'),Number(args.durationMs)||5000))};},
   },
   {
+    name:'open_gods_eye_view',description:"Open the user's God's Eye View 3D globe (a separate real project the user runs locally — live aircraft/ships/satellites/earthquakes on a photoreal Earth), embedded inside Axiom's window. Starts its local dev server if not already running, which can take up to 20 seconds on first launch.",parameters:{type:'object',properties:{},additionalProperties:false},permission:{id:'gods-eye-view',label:"Opened God's Eye View",risk:'write',enabled:true},async execute(_args,store){if(!store)throw new Error('Store unavailable.');const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");const result=await manager.open(store.godsEyeViewPath());if(!result.ready)throw new Error(result.error||"God's Eye View could not be started.");return{output:JSON.stringify(result)};},
+  },
+  {
+    name:'gods_eye_fly_to',description:"Fly the already-open God's Eye View globe camera to an exact latitude/longitude. Requires the view to already be open — call open_gods_eye_view first if it isn't.",parameters:{type:'object',properties:{lat:{type:'number'},lon:{type:'number'},alt:{type:'number'},heading:{type:'number'},pitch:{type:'number'}},required:['lat','lon'],additionalProperties:false},permission:{id:'gods-eye-view',label:"Moved the God's Eye View camera",risk:'write',enabled:true},async execute(args,store){if(!store)throw new Error('Store unavailable.');const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");await manager.flyTo({lat:Number(args.lat),lon:Number(args.lon),alt:args.alt!==undefined?Number(args.alt):undefined,heading:args.heading!==undefined?Number(args.heading):undefined,pitch:args.pitch!==undefined?Number(args.pitch):undefined});return{output:JSON.stringify({moved:true,lat:Number(args.lat),lon:Number(args.lon)})};},
+  },
+  {
     name: 'show_notification',
     description: 'Show a native system notification with a short title and message when the user asks to be notified or when an approved background task finishes.',
     parameters: { type:'object', properties:{ title:{type:'string'},body:{type:'string'} }, required:['title','body'], additionalProperties:false },
@@ -989,7 +995,11 @@ const registry: ToolDefinition[] = [
 const userRoots = ['Desktop', 'Documents', 'Downloads'].map((folder) => path.resolve(os.homedir(), folder));
 const pendingPowerShell = new Map<string,{command:string;expires:number}>();
 const windowsOnlyTools=new Set(['request_powershell_confirmation','execute_confirmed_powershell']);
-const macOnlyTools=new Set(['mac_compose_mail','mac_create_note','mac_create_reminder','mac_calendar_create_event']);
+// God's Eye View integration is Mac-only for now — the user's real install
+// is on macOS and Windows support is explicitly deferred until he's back on
+// that machine; gating here keeps the tool from being offered where it can't
+// actually work, same reasoning as the other mac_* tools below.
+const macOnlyTools=new Set(['mac_compose_mail','mac_create_note','mac_create_reminder','mac_calendar_create_event','open_gods_eye_view','gods_eye_fly_to']);
 const toolAvailable=(name:string):boolean=>(!windowsOnlyTools.has(name)||platformProfile().supportsWinApp)&&(!macOnlyTools.has(name)||process.platform==='darwin');
 function allowedPath(input: string): string {
   if (!path.isAbsolute(input)) throw new Error('Use an absolute path inside Desktop, Documents, or Downloads.');
@@ -1257,6 +1267,12 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
   if(/\b(what can you do|capabilities|everything you can|all tools|control everything)\b/.test(text))registry.forEach((tool)=>names.add(tool.name));
   if(/\b(color|colour|theme|interface|ui|hud|eyes?|appearance|emotion|glow|motion|animation|density|happy|angry|excited|violet|purple|amber|orange|pink|teal|cyan|green|blue|red|white)\b/.test(text))names.add('set_companion_appearance');
   if(/\b(time|date|day is it|what day)\b/.test(text))names.add('get_local_time');
+  // "God's eye view" / "gods eye view" — deliberately the full phrase, not
+  // the bare word "eye(s)", which already means the companion-appearance
+  // control above; only the named app's own name should trigger this.
+  if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text))names.add('open_gods_eye_view');
+  if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text)&&/\b(fly|zoom|go|look|show me|navigate|move|pan)\b/.test(text))names.add('gods_eye_fly_to');
+  if(/\b(fly to|zoom (?:in )?on|look at|navigate to)\b[\s\S]{0,40}\b(latitude|longitude|coordinates?|globe)\b/.test(text))names.add('gods_eye_fly_to');
   return registry.filter((tool)=>names.has(tool.name)&&toolAvailable(tool.name)).map((tool)=>({type:'function',name:tool.name,description:tool.description,parameters:tool.parameters,strict:true}));
 }
 
