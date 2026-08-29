@@ -14,6 +14,7 @@ import './systemDiagnostics.css';
 import './operationalTruth.css';
 import './readability.css';
 import './commandCenter.css';
+import './onboarding.css';
 
 // App is a single large component tree (camera/face tracking, WebRTC, voice
 // inference, dozens of effects) with no fallback of its own — before this,

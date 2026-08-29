@@ -217,6 +217,10 @@ export interface PublicSettings {
    * whether one is set is exposed here; the phrase itself never leaves the
    * main process. */
   hasActionApprovalPhrase:boolean;
+  /** False only for a genuinely brand-new install — an existing user's data
+   * file that predates this field is treated as already onboarded (see
+   * store.ts's init()), so this never replays the wizard on an upgrade. */
+  hasCompletedOnboarding:boolean;
 }
 
 export interface SaveSettingsRequest {
@@ -271,6 +275,7 @@ export interface SaveSettingsRequest {
   clearOwnerOverridePhrase?:boolean;
   actionApprovalPhrase?:string;
   clearActionApprovalPhrase?:boolean;
+  completeOnboarding?:boolean;
 }
 
 export interface PermissionInfo {

@@ -298,6 +298,51 @@ describe('action approval phrase', () => {
   });
 });
 
+describe('first-run onboarding', () => {
+  beforeEach(() => { machineKey = 'machine-A'; userData = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-store-')); });
+
+  it('is false for a genuinely brand-new install, with no file on disk at all', () => {
+    const store = newStore();
+    expect(store.publicSettings().hasCompletedOnboarding).toBe(false);
+  });
+
+  it('is set true by completeOnboarding and persists across a reload', () => {
+    const origin = newStore();
+    origin.saveSettings({ model: '', completeOnboarding: true } as never);
+    expect(origin.publicSettings().hasCompletedOnboarding).toBe(true);
+    const reloaded = newStore();
+    expect(reloaded.publicSettings().hasCompletedOnboarding).toBe(true);
+  });
+
+  // The real, live migration concern: this field didn't exist before this
+  // version. Any existing user's on-disk file simply has no key for it —
+  // treating that as "needs onboarding" would replay the first-run wizard
+  // on every existing install the moment this update ships. A file that
+  // predates the field must load as already onboarded.
+  it('treats a pre-existing file that predates this field as already onboarded, not as needing the wizard', () => {
+    const origin = newStore();
+    saveKeys(origin, { openAIKey: 'sk-test-openai-value' }); // produces a real file on disk
+    const raw = JSON.parse(fs.readFileSync(dataFile(), 'utf8'));
+    delete raw.hasCompletedOnboarding; // simulate a file saved by a version before this field existed
+    fs.writeFileSync(dataFile(), JSON.stringify(raw), 'utf8');
+    const upgraded = newStore();
+    expect(upgraded.publicSettings().hasCompletedOnboarding).toBe(true);
+  });
+
+  // The other side of that same migration heuristic: a real, CURRENT
+  // install that genuinely started onboarding and quit partway through
+  // (hasCompletedOnboarding explicitly false, not absent) must resume the
+  // wizard on next launch, not be swept into the "already onboarded"
+  // treatment meant only for pre-existing files.
+  it('keeps an explicit false as false across a reload — an interrupted onboarding resumes, it does not get skipped', () => {
+    const origin = newStore();
+    saveKeys(origin, { openAIKey: 'sk-test-openai-value' });
+    expect(origin.publicSettings().hasCompletedOnboarding).toBe(false);
+    const reloaded = newStore();
+    expect(reloaded.publicSettings().hasCompletedOnboarding).toBe(false);
+  });
+});
+
 describe('self-corrections — Axiom remembering its own past mistakes', () => {
   beforeEach(() => { machineKey = 'machine-A'; userData = fs.mkdtempSync(path.join(os.tmpdir(), 'axiom-store-')); });
 
