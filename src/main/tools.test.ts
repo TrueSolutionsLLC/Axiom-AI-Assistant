@@ -677,6 +677,15 @@ describe("God's Eye View integration", () => {
     expect(providerTools('Zoom in on latitude 35, longitude 139 on the globe').some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
     expect(providerTools("Open God's Eye View").some((tool)=>tool.name==='gods_eye_fly_to')).toBe(false);
   });
+  // Real live miss: this exact phrase, mid-conversation with the panel
+  // already open, offered nothing at all — no "God's Eye View" phrase, no
+  // lat/lon wording, no live-data domain word, just a bare movement verb
+  // aimed at "the map."
+  it.skipIf(process.platform!=='darwin')('offers gods_eye_fly_to for a bare movement verb aimed at "the map", not just "globe"', () => {
+    expect(providerTools('You gotta fly the map to St. Louis, Missouri.').some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
+    expect(providerTools('Move the camera to Tokyo').some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
+    expect(providerTools('Pan the view to the coast').some((tool)=>tool.name==='gods_eye_fly_to')).toBe(true);
+  });
   it.skipIf(process.platform==='darwin')('is unavailable on non-macOS platforms even when the phrase matches', () => {
     expect(providerTools("Open God's Eye View").some((tool)=>tool.name==='open_gods_eye_view')).toBe(false);
     expect(capabilityManifest().some((item)=>item.name==='open_gods_eye_view')).toBe(false);

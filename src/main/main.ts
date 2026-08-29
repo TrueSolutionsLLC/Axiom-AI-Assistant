@@ -219,7 +219,16 @@ async function providerCheck(provider:AIProvider|'elevenlabs'):Promise<{ok:boole
 
 function healthSnapshot():ProviderHealth[]{return(['openai','anthropic','gemini'] as AIProvider[]).map((provider)=>{if(!store.aiKey(provider))return{provider,state:'unconfigured',message:'No encrypted key saved.'};return{provider,...(providerHealth.get(provider)??{state:'ready' as const,message:'Credential ready; awaiting health check.'})};});}
 
-function mayMutate(messageText:string):boolean{return/\b(create|write|delete|remove|rename|move|copy|open|launch|click|press|type|fill|paste|close|quit|execute|run|powershell|install|publish|send|purchase|control|turn|dim|lock|unlock|arm|disarm)\b/i.test(messageText);}
+// fly/zoom/pan/navigate added for God's Eye View: those verbs drive a real
+// side-effecting action (a page reload against the embedded globe) but
+// weren't covered by any existing word here, so a request built entirely
+// from them (e.g. "zoom in on Tokyo") sailed through with cross-provider
+// failover fully enabled — a real risk of the tool firing once against the
+// first provider and then firing again against a retry that has no memory
+// of it. Not adding "find"/"track"/"show me" here — too common in ordinary,
+// genuinely non-mutating conversation to be worth losing failover
+// resilience over.
+function mayMutate(messageText:string):boolean{return/\b(create|write|delete|remove|rename|move|copy|open|launch|click|press|type|fill|paste|close|quit|execute|run|powershell|install|publish|send|purchase|control|turn|dim|lock|unlock|arm|disarm|fly|zoom|pan|navigate)\b/i.test(messageText);}
 function currentPermissions(){return permissions().map((permission)=>({...permission,enabled:store.permissionEnabled(permission.id,permission.enabled)}));}
 
 async function refreshOperationalProbes(force=false):Promise<void>{

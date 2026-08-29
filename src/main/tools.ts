@@ -1307,6 +1307,13 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
   if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text))names.add('open_gods_eye_view');
   if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text)&&/\b(fly|zoom|go|look|show me|navigate|move|pan)\b/.test(text)){names.add('gods_eye_fly_to');names.add('gods_eye_set_layers');}
   if(/\b(fly to|zoom (?:in )?on|look at|navigate to)\b[\s\S]{0,40}\b(latitude|longitude|coordinates?|globe)\b/.test(text))names.add('gods_eye_fly_to');
+  // A real live miss: "You gotta fly the map to St. Louis, Missouri" said
+  // "map", not "globe", had no lat/lon wording, and named no live-data
+  // domain word either — so it matched none of the patterns above and
+  // Axiom, with genuinely zero tool offered, told the user there was no
+  // map-control capability at all. A bare movement verb aimed at "the map/
+  // camera/globe/view" is unambiguous on its own.
+  if(/\b(fly|move|navigate|pan|zoom)\b[\s\S]{0,20}\b(the )?(map|camera|globe|view)\b/i.test(text))names.add('gods_eye_fly_to');
   // A live user asked "find me live flights over St. Louis, MO" with the
   // panel already open and got nothing — the message never says "God's Eye
   // View" at all, since it was already the obvious open context, but the
