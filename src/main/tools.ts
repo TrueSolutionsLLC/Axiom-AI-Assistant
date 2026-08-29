@@ -16,6 +16,7 @@ import { showCursorGuide } from './cursorGuide';
 import { getSystemTelemetrySnapshot } from './systemTelemetry';
 import { searchGoogle } from './googleSearch';
 import { getNewsHeadlines } from './newsFeed';
+import { GODS_EYE_LAYER_IDS, type GodsEyeLayerId } from './godsEyeView';
 
 interface ToolDefinition {
   name: string;
@@ -653,7 +654,40 @@ const registry: ToolDefinition[] = [
     name:'open_gods_eye_view',description:"Open the user's God's Eye View 3D globe (a separate real project the user runs locally — live aircraft/ships/satellites/earthquakes on a photoreal Earth), embedded inside Axiom's window. Starts its local dev server if not already running, which can take up to 20 seconds on first launch.",parameters:{type:'object',properties:{},additionalProperties:false},permission:{id:'gods-eye-view',label:"Opened God's Eye View",risk:'write',enabled:true},async execute(_args,store){if(!store)throw new Error('Store unavailable.');const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");const result=await manager.open(store.godsEyeViewPath());if(!result.ready)throw new Error(result.error||"God's Eye View could not be started.");return{output:JSON.stringify(result)};},
   },
   {
-    name:'gods_eye_fly_to',description:"Fly the already-open God's Eye View globe camera to an exact latitude/longitude. Requires the view to already be open — call open_gods_eye_view first if it isn't.",parameters:{type:'object',properties:{lat:{type:'number'},lon:{type:'number'},alt:{type:'number'},heading:{type:'number'},pitch:{type:'number'}},required:['lat','lon'],additionalProperties:false},permission:{id:'gods-eye-view',label:"Moved the God's Eye View camera",risk:'write',enabled:true},async execute(args,store){if(!store)throw new Error('Store unavailable.');const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");await manager.flyTo({lat:Number(args.lat),lon:Number(args.lon),alt:args.alt!==undefined?Number(args.alt):undefined,heading:args.heading!==undefined?Number(args.heading):undefined,pitch:args.pitch!==undefined?Number(args.pitch):undefined});return{output:JSON.stringify({moved:true,lat:Number(args.lat),lon:Number(args.lon)})};},
+    name:'gods_eye_fly_to',
+    description:`Fly the God's Eye View globe camera to an exact latitude/longitude, optionally turning on live data layers at the same time (e.g. "find live flights over St. Louis" = fly there and enable the flights layer in one call). Opens the view first if it isn't already open — do not call open_gods_eye_view separately before this. Known layer ids: ${GODS_EYE_LAYER_IDS.join(', ')}.`,
+    parameters:{type:'object',properties:{lat:{type:'number'},lon:{type:'number'},alt:{type:'number'},heading:{type:'number'},pitch:{type:'number'},layers:{type:'array',items:{type:'string',enum:GODS_EYE_LAYER_IDS}}},required:['lat','lon'],additionalProperties:false},
+    permission:{id:'gods-eye-view',label:"Moved the God's Eye View camera",risk:'write',enabled:true},
+    async execute(args,store){
+      if(!store)throw new Error('Store unavailable.');
+      const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");
+      if(!manager.isOpen){const opened=await manager.open(store.godsEyeViewPath());if(!opened.ready)throw new Error(opened.error||"God's Eye View could not be started.");}
+      await manager.flyTo({lat:Number(args.lat),lon:Number(args.lon),alt:args.alt!==undefined?Number(args.alt):undefined,heading:args.heading!==undefined?Number(args.heading):undefined,pitch:args.pitch!==undefined?Number(args.pitch):undefined});
+      // Not filtered against GODS_EYE_LAYER_IDS here — manager.setLayers()
+      // is the one real source of truth for what's valid, and it throws a
+      // named, honest error for anything it doesn't recognize. Silently
+      // dropping an unrecognized id here instead would make a typo'd layer
+      // name look like it worked while doing nothing, exactly the failure
+      // mode the manager's own validation exists to prevent.
+      const requestedLayers=Array.isArray(args.layers)?args.layers as GodsEyeLayerId[]:[];
+      const layers=requestedLayers.length?await manager.setLayers(requestedLayers):manager.currentLayers;
+      return{output:JSON.stringify({moved:true,lat:Number(args.lat),lon:Number(args.lon),enabledLayers:layers})};
+    },
+  },
+  {
+    name:'gods_eye_set_layers',
+    description:`Turn God's Eye View live data layers on or off without moving the camera (e.g. "also show satellites", "turn off the flights layer"). Opens the view first if it isn't already open. Known layer ids: ${GODS_EYE_LAYER_IDS.join(', ')}.`,
+    parameters:{type:'object',properties:{enable:{type:'array',items:{type:'string',enum:GODS_EYE_LAYER_IDS}},disable:{type:'array',items:{type:'string',enum:GODS_EYE_LAYER_IDS}}},additionalProperties:false},
+    permission:{id:'gods-eye-view',label:"Changed God's Eye View data layers",risk:'write',enabled:true},
+    async execute(args,store){
+      if(!store)throw new Error('Store unavailable.');
+      const manager=store.getGodsEyeViewManager();if(!manager)throw new Error("Axiom's window is not ready.");
+      if(!manager.isOpen){const opened=await manager.open(store.godsEyeViewPath());if(!opened.ready)throw new Error(opened.error||"God's Eye View could not be started.");}
+      const enable=Array.isArray(args.enable)?args.enable as GodsEyeLayerId[]:[];
+      const disable=Array.isArray(args.disable)?args.disable as GodsEyeLayerId[]:[];
+      const layers=await manager.setLayers(enable,disable);
+      return{output:JSON.stringify({enabledLayers:layers})};
+    },
   },
   {
     name: 'show_notification',
@@ -999,7 +1033,7 @@ const windowsOnlyTools=new Set(['request_powershell_confirmation','execute_confi
 // is on macOS and Windows support is explicitly deferred until he's back on
 // that machine; gating here keeps the tool from being offered where it can't
 // actually work, same reasoning as the other mac_* tools below.
-const macOnlyTools=new Set(['mac_compose_mail','mac_create_note','mac_create_reminder','mac_calendar_create_event','open_gods_eye_view','gods_eye_fly_to']);
+const macOnlyTools=new Set(['mac_compose_mail','mac_create_note','mac_create_reminder','mac_calendar_create_event','open_gods_eye_view','gods_eye_fly_to','gods_eye_set_layers']);
 const toolAvailable=(name:string):boolean=>(!windowsOnlyTools.has(name)||platformProfile().supportsWinApp)&&(!macOnlyTools.has(name)||process.platform==='darwin');
 function allowedPath(input: string): string {
   if (!path.isAbsolute(input)) throw new Error('Use an absolute path inside Desktop, Documents, or Downloads.');
@@ -1271,8 +1305,17 @@ export function providerTools(userMessage?: string, store?: AppStore): Record<st
   // the bare word "eye(s)", which already means the companion-appearance
   // control above; only the named app's own name should trigger this.
   if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text))names.add('open_gods_eye_view');
-  if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text)&&/\b(fly|zoom|go|look|show me|navigate|move|pan)\b/.test(text))names.add('gods_eye_fly_to');
+  if(/\bgod'?s[ -]?eye([ -]?view)?\b/.test(text)&&/\b(fly|zoom|go|look|show me|navigate|move|pan)\b/.test(text)){names.add('gods_eye_fly_to');names.add('gods_eye_set_layers');}
   if(/\b(fly to|zoom (?:in )?on|look at|navigate to)\b[\s\S]{0,40}\b(latitude|longitude|coordinates?|globe)\b/.test(text))names.add('gods_eye_fly_to');
+  // A live user asked "find me live flights over St. Louis, MO" with the
+  // panel already open and got nothing — the message never says "God's Eye
+  // View" at all, since it was already the obvious open context, but the
+  // trigger above required the app's name on every single follow-up. These
+  // words are otherwise unique to this one feature (nothing else in Axiom
+  // deals with live aircraft, vessel tracking, satellites, or the rest of
+  // the real layer registry — see GODS_EYE_LAYER_IDS), so they're safe to
+  // trigger on without the app's name being repeated every time.
+  if(/\b(live )?(flights?|aircraft|planes?|jets?|helicopters?|ships?|vessels?|boats?|satellites?|earthquakes?|military (?:aircraft|installations?|awareness)|rocket launch(?:es)?|bike ?share|submarine cables?|traffic cameras?|\bcctv\b)\b/i.test(text)&&/\b(live|track|tracking|find|show me|near|over|around|enable|turn on|turn off|disable|hide|display|watch)\b/i.test(text)){names.add('gods_eye_fly_to');names.add('gods_eye_set_layers');}
   return registry.filter((tool)=>names.has(tool.name)&&toolAvailable(tool.name)).map((tool)=>({type:'function',name:tool.name,description:tool.description,parameters:tool.parameters,strict:true}));
 }
 

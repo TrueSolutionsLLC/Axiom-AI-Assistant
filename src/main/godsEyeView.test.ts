@@ -114,7 +114,7 @@ describe('GodsEyeViewManager', () => {
     expect(addedViews[0].webContents.executeJavaScript).not.toHaveBeenCalled();
   });
 
-  it('flyTo drives the already-open view by setting location.hash to the real observed URL format', async () => {
+  it('flyTo drives the already-open view by patching the real observed URL hash fields', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
     const manager = new GodsEyeViewManager(fakeWindow());
     const dir = projectDir();
@@ -122,11 +122,64 @@ describe('GodsEyeViewManager', () => {
     await manager.open(dir);
     await manager.flyTo({ lat: 35.6, lon: 139.7, alt: 5000, heading: 90, pitch: -10 });
     const script = addedViews[0].webContents.executeJavaScript.mock.calls[0][0] as string;
-    expect(script).toContain('lat=35.6');
-    expect(script).toContain('lon=139.7');
-    expect(script).toContain('alt=5000');
-    expect(script).toContain('heading=90');
-    expect(script).toContain('pitch=-10');
+    expect(script).toContain('"lat":"35.6"');
+    expect(script).toContain('"lon":"139.7"');
+    expect(script).toContain('"alt":"5000"');
+    expect(script).toContain('"heading":"90"');
+    expect(script).toContain('"pitch":"-10"');
+  });
+
+  // The real bug this was built to fix: flyTo() used to overwrite the whole
+  // hash, which would have silently turned off any layer a prior
+  // setLayers() call had enabled — now every write merges into whatever's
+  // already there via URLSearchParams, so camera and layer state never
+  // clobber each other.
+  it('setLayers turns on a real layer by its correct single-character token, merging rather than overwriting the hash', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    const result = await manager.setLayers(['flights']);
+    expect(result).toEqual(['flights']);
+    expect(manager.currentLayers).toEqual(['flights']);
+    const script = addedViews[0].webContents.executeJavaScript.mock.calls[0][0] as string;
+    expect(script).toContain('"l":"f"');
+    expect(script).toContain("location.hash.slice(1)");
+  });
+
+  it('setLayers accumulates multiple enabled layers and can disable one without clearing the rest', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await manager.setLayers(['flights']);
+    await manager.setLayers(['satellites']);
+    expect(manager.currentLayers.sort()).toEqual(['flights', 'satellites']);
+    await manager.setLayers([], ['flights']);
+    expect(manager.currentLayers).toEqual(['satellites']);
+  });
+
+  it('setLayers rejects an unknown layer id up front rather than silently doing nothing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await expect(manager.setLayers(['drones' as never])).rejects.toThrow(/Unknown/);
+    expect(manager.currentLayers).toEqual([]);
+  });
+
+  it('close() resets tracked layer state, so reopening does not silently claim stale layers are still on', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 })));
+    const manager = new GodsEyeViewManager(fakeWindow());
+    const dir = projectDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+    await manager.open(dir);
+    await manager.setLayers(['flights']);
+    manager.close();
+    expect(manager.currentLayers).toEqual([]);
   });
 
   it('close() removes the view from the window and clears isOpen', async () => {

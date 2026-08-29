@@ -708,10 +708,80 @@ describe("God's Eye View integration", () => {
   });
   it.skipIf(process.platform!=='darwin')('gods_eye_fly_to forwards exact coordinates to the manager', async () => {
     let received:unknown;
-    const manager={flyTo:async(target:unknown)=>{received=target;}};
+    const manager={isOpen:true,flyTo:async(target:unknown)=>{received=target;},currentLayers:[]};
     const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
     const result=await executeTool('gods_eye_fly_to',{lat:35.6,lon:139.7,alt:5000},store);
     expect(result.event.status).toBe('verified');
     expect(received).toMatchObject({lat:35.6,lon:139.7,alt:5000});
+  });
+
+  // The real live bug this was built to fix: Robbie asked "find me live
+  // flights over St. Louis, MO" with the panel already open and Axiom did
+  // nothing at all — the message never says "God's Eye View" (it was
+  // already the obvious open context), and there was no capability to turn
+  // on the flights layer at all even if the tool had been offered.
+  it.skipIf(process.platform!=='darwin')('offers the gods-eye tools for a live-data request that never names the app', () => {
+    const tools=providerTools('find me live flights over st. louis, mo').map((tool)=>tool.name);
+    expect(tools).toContain('gods_eye_fly_to');
+    expect(tools).toContain('gods_eye_set_layers');
+  });
+  it.skipIf(process.platform!=='darwin')('does not offer gods-eye tools for an unrelated message that happens to share no keywords', () => {
+    const tools=providerTools('what is the weather like today').map((tool)=>tool.name);
+    expect(tools).not.toContain('gods_eye_fly_to');
+    expect(tools).not.toContain('gods_eye_set_layers');
+  });
+
+  it.skipIf(process.platform!=='darwin')('gods_eye_fly_to opens the view first when it is not already open, instead of requiring a separate call', async () => {
+    let opened=false,flownTo:unknown;
+    const manager={
+      get isOpen(){return opened;},
+      open:async()=>{opened=true;return{ready:true,url:'http://localhost:4173/'};},
+      flyTo:async(target:unknown)=>{flownTo=target;},
+      currentLayers:[] as string[],
+    };
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>'/Users/robbie/Desktop/gods-eye-view'} as unknown as AppStore;
+    const result=await executeTool('gods_eye_fly_to',{lat:38.627,lon:-90.1994},store);
+    expect(result.event.status).toBe('verified');
+    expect(opened).toBe(true);
+    expect(flownTo).toMatchObject({lat:38.627,lon:-90.1994});
+  });
+
+  it.skipIf(process.platform!=='darwin')('gods_eye_fly_to with a layers argument enables them in the same call — the actual "find flights over St. Louis" shape', async () => {
+    let flownTo:unknown,layersRequested:unknown;
+    const manager={
+      isOpen:true,
+      flyTo:async(target:unknown)=>{flownTo=target;},
+      setLayers:async(enable:unknown)=>{layersRequested=enable;return['flights'];},
+      currentLayers:[] as string[],
+    };
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
+    const result=await executeTool('gods_eye_fly_to',{lat:38.627,lon:-90.1994,layers:['flights']},store);
+    expect(result.event.status).toBe('verified');
+    expect(flownTo).toMatchObject({lat:38.627,lon:-90.1994});
+    expect(layersRequested).toEqual(['flights']);
+    expect(result.output).toContain('flights');
+  });
+
+  it.skipIf(process.platform!=='darwin')('gods_eye_set_layers forwards enable/disable and opens the view first when needed', async () => {
+    let opened=false,enabled:unknown,disabled:unknown;
+    const manager={
+      get isOpen(){return opened;},
+      open:async()=>{opened=true;return{ready:true,url:'http://localhost:4173/'};},
+      setLayers:async(enable:unknown,disable:unknown)=>{enabled=enable;disabled=disable;return['flights','satellites'];},
+    };
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>'/Users/robbie/Desktop/gods-eye-view'} as unknown as AppStore;
+    const result=await executeTool('gods_eye_set_layers',{enable:['flights','satellites'],disable:['traffic']},store);
+    expect(result.event.status).toBe('verified');
+    expect(opened).toBe(true);
+    expect(enabled).toEqual(['flights','satellites']);
+    expect(disabled).toEqual(['traffic']);
+    expect(result.output).toContain('satellites');
+  });
+
+  it.skipIf(process.platform!=='darwin')('gods_eye_set_layers surfaces the manager\'s own error for an unknown layer id', async () => {
+    const manager={isOpen:true,setLayers:async()=>{throw new Error('Unknown God\'s Eye View layer "drones". Known layers: flights, satellites.');}};
+    const store={getGodsEyeViewManager:()=>manager,godsEyeViewPath:()=>''} as unknown as AppStore;
+    const result=await executeTool('gods_eye_set_layers',{enable:['drones']},store);
+    expect(result.event.status).toBe('blocked');
   });
 });
