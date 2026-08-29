@@ -45,3 +45,7 @@ Settings → Updates checks for and verifies new versions (SHA-256 checksum, nev
 - [`docs/SECURITY.md`](docs/SECURITY.md) — how permissions, approvals, and credential storage work under the hood.
 - [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — the original product vision this was built against.
 - [`CLEAN_ROOM.md`](CLEAN_ROOM.md) — how this project was built without reusing any other product's code or assets.
+
+## License
+
+Axiom is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE). You're free to use, study, modify, and redistribute it — including commercially — as long as any distributed modified version stays under the same license and its source stays available.

@@ -5,7 +5,7 @@
   "description": "Clean-room Windows AI companion (working title)",
   "main": "dist-main/main/main.js",
   "author": "Robbie",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "npm run build:main && concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "build:main": "tsc -p tsconfig.main.json",
