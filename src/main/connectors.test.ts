@@ -1,6 +1,33 @@
 import { afterEach,describe,expect,it,vi } from 'vitest';
 import type { ConnectorId,ConnectorStatus } from '../shared/contracts';
 import type { AppStore } from './store';
+
+// Only warmHomebridgeAccessoryCache() (connectors.ts) touches electron
+// directly — a hidden BrowserWindow used to log into Homebridge's own web
+// UI once. Mocked here so that path is actually exercised and asserted on,
+// not just silently swallowed by homebridgeSnapshot()'s .catch(()=>false)
+// (which would make a broken warmup look identical to a working one).
+const homebridgeWarmupViews:Array<{webContents:{loadURL:ReturnType<typeof vi.fn>;executeJavaScript:ReturnType<typeof vi.fn>;isLoading:ReturnType<typeof vi.fn>;once:ReturnType<typeof vi.fn>}}> =[];
+vi.mock('electron',()=>({
+  shell:{openExternal:vi.fn()},
+  BrowserWindow:class{
+    webContents={loadURL:vi.fn(async(_url:string)=>{}),executeJavaScript:vi.fn(async()=>true),isLoading:vi.fn(()=>false),once:vi.fn()};
+    // BrowserWindow has its own top-level loadURL() (a real Electron
+    // convenience that delegates to webContents.loadURL internally) — the
+    // real code calls window.loadURL(...) directly, same as
+    // browserControl.ts already does, not window.webContents.loadURL(...).
+    loadURL(url:string){return this.webContents.loadURL(url);}
+    on(){/* no-op */}
+    // connectors.ts deliberately reuses its one hidden warmup window across
+    // calls in real production use (avoids spawning a new one every time) —
+    // always reporting "destroyed" here trades that fidelity for clean
+    // per-test isolation instead, since each test needs its own fresh
+    // window to assert against independently.
+    isDestroyed(){return true;}
+    constructor(){homebridgeWarmupViews.push(this as never);}
+  },
+}));
+
 import { ConnectorClient } from './connectors';
 
 const statuses=():ConnectorStatus[]=>['google','shopify','meta','dropbox'].map((id)=>({id:id as ConnectorId,label:id,configured:true,connected:true,account:id==='meta'?'act_123':'',endpoint:id==='shopify'?'store.myshopify.com':id==='meta'?'graph.facebook.com/v24.0':'',scopes:[],setupHint:''}));
@@ -176,22 +203,61 @@ describe('Homebridge Config UI X connector',()=>{
   // Homebridge Config UI X quirk (github.com/homebridge/homebridge-config-ui-x
   // issue #1005), not an Axiom bug: after a restart, GET /api/accessories
   // genuinely returns [] until the Accessories tab has been opened in
-  // Homebridge's own web UI at least once. Login and the request both
-  // succeed — connected must stay true — but a zero-length response should
-  // carry guidance instead of looking like Axiom itself is broken.
-  it('explains the known Homebridge Config UI X empty-cache quirk instead of silently reporting zero devices',async()=>{
-    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/api/auth/login')?new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200}):new Response('[]',{status:200})));
+  // Homebridge's own web UI at least once. Rather than just tell the user to
+  // do that by hand, Axiom now does it itself in a hidden window — these
+  // tests exercise that real flow, not just the fallback text.
+  it('automatically warms the cache in a hidden window using the real login form fields, and reports the outcome honestly when it still does not help',async()=>{
+    homebridgeWarmupViews.length=0;
+    let accessoryCalls=0;
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+      if(String(url).endsWith('/api/auth/login'))return new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200});
+      accessoryCalls+=1;return new Response('[]',{status:200});
+    }));
     const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
     expect(snapshot.connected).toBe(true);
     expect(snapshot.accessories).toEqual([]);
-    expect(snapshot.error).toMatch(/Config UI X|Accessories tab/i);
+    // A hidden window really ran: logged into the real form (sourced
+    // directly from Homebridge's own login.component.html — #form-username,
+    // #form-pass, #submit-button) with the same credentials already saved
+    // for the API, then loaded the Accessories tab.
+    expect(homebridgeWarmupViews).toHaveLength(1);
+    const view=homebridgeWarmupViews[0];
+    expect(view.webContents.loadURL).toHaveBeenNthCalledWith(1,'http://homebridge.local:8581/login');
+    expect(view.webContents.loadURL).toHaveBeenNthCalledWith(2,'http://homebridge.local:8581/accessories');
+    const fillScript=view.webContents.executeJavaScript.mock.calls[0][0] as string;
+    expect(fillScript).toContain('#form-username');
+    expect(fillScript).toContain('#form-pass');
+    expect(fillScript).toContain('#submit-button');
+    expect(fillScript).toContain('hunter2');
+    // The real accessories endpoint was tried again after warming up, not
+    // just once and given up on.
+    expect(accessoryCalls).toBe(2);
+    expect(snapshot.error).toMatch(/still reports zero/i);
   });
 
-  it('does not attach the empty-cache hint when accessories are actually present',async()=>{
+  it('sees the accessories once the automatic warmup populates the cache, with no hint attached',async()=>{
+    homebridgeWarmupViews.length=0;
+    let accessoryCalls=0;
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>{
+      if(String(url).endsWith('/api/auth/login'))return new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200});
+      accessoryCalls+=1;
+      if(accessoryCalls===1)return new Response('[]',{status:200});
+      return new Response(JSON.stringify([{uniqueId:'abc123',serviceName:'Lightbulb',humanType:'Lightbulb',accessoryInformation:{Name:'Office Lamp'},values:{On:false}}]),{status:200});
+    }));
+    const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
+    expect(snapshot.connected).toBe(true);
+    expect(snapshot.accessories).toHaveLength(1);
+    expect(snapshot.error).toBeUndefined();
+    expect(homebridgeWarmupViews).toHaveLength(1);
+  });
+
+  it('does not open a warmup window at all when accessories are already present on the first try',async()=>{
+    homebridgeWarmupViews.length=0;
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/api/auth/login')?new Response(JSON.stringify({access_token:'jwt-session-token',expires_in:28800}),{status:200}):new Response(JSON.stringify([{uniqueId:'abc123',serviceName:'Lightbulb',humanType:'Lightbulb',accessoryInformation:{Name:'Office Lamp'},values:{On:false}}]),{status:200})));
     const snapshot=await new ConnectorClient(fakeHomebridgeStore()).homebridgeSnapshot();
     expect(snapshot.connected).toBe(true);
     expect(snapshot.error).toBeUndefined();
+    expect(homebridgeWarmupViews).toHaveLength(0);
   });
 });
 

@@ -1,12 +1,37 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { shell } from 'electron';
+import { BrowserWindow, shell } from 'electron';
 import type { ConnectorId, ConnectorStatus, HomebridgeAccessory, HomebridgeControlRequest, HomebridgeControlResult, HomebridgeSnapshot, RingCamera, RingCameraList } from '../shared/contracts';
 import type { AppStore } from './store';
 
 const googleScopes=['openid','email','https://www.googleapis.com/auth/gmail.readonly','https://www.googleapis.com/auth/gmail.modify','https://www.googleapis.com/auth/gmail.send','https://www.googleapis.com/auth/calendar'];
 
 class RingTwoFactorRequiredError extends Error{constructor(prompt:string){super(prompt);this.name='RingTwoFactorRequiredError';}}
+
+// A hidden, one-shot window used only to warm Homebridge Config UI X's own
+// accessory cache (see homebridgeSnapshot() below) — separate from the
+// user-facing "Axiom Browser" (browserControl.ts), which is HTTPS-only by
+// design and always shows itself; Homebridge is typically plain HTTP on the
+// local network and this must stay invisible. Not embedded in the main
+// window either, unlike God's Eye View — this never needs to be seen, only
+// to run Homebridge's own login once so its server populates its cache the
+// same way it would for a person opening it in a real browser tab.
+let homebridgeWarmupWindow: BrowserWindow | null = null;
+function windowForHomebridgeWarmup(): BrowserWindow {
+  if (homebridgeWarmupWindow && !homebridgeWarmupWindow.isDestroyed()) return homebridgeWarmupWindow;
+  homebridgeWarmupWindow = new BrowserWindow({
+    width: 1024, height: 768, show: false,
+    webPreferences: { partition: 'persist:axiom-homebridge-warmup', nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true },
+  });
+  homebridgeWarmupWindow.on('closed', () => { homebridgeWarmupWindow = null; });
+  return homebridgeWarmupWindow;
+}
+async function settleHomebridgeWarmup(window: BrowserWindow, timeoutMs = 10_000): Promise<void> {
+  await Promise.race([
+    new Promise<void>((resolve) => { if (!window.webContents.isLoading()) return resolve(); window.webContents.once('did-stop-loading', () => resolve()); }),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
 
 export class ConnectorClient {
   constructor(private readonly store:AppStore){}
@@ -71,12 +96,71 @@ export class ConnectorClient {
   // a Homebridge restart, GET /api/accessories genuinely returns an empty
   // array until someone opens the Accessories tab in Homebridge's own web
   // UI at least once — Config UI X populates its accessory cache from that
-  // page load, not from the plain REST call alone. Reproduced exactly with
+  // page load, not from the plain REST call alone. Confirmed against
   // Robbie's real instance: Axiom reported zero devices, then correctly saw
   // all of them the moment the Homebridge dashboard had been opened in a
-  // browser. Surfaced as guidance here (connected stays true — the request
-  // itself succeeded) rather than left to look like Axiom itself is broken.
-  async homebridgeSnapshot():Promise<HomebridgeSnapshot>{const status=this.statuses().find((item)=>item.id==='homebridge')!,generatedAt=new Date().toISOString();if(!status.configured)return{configured:false,connected:false,endpoint:status.endpoint,generatedAt,accessories:[],counts:{},error:'Homebridge is not configured.'};try{const raw=await this.homebridgeJson('/api/accessories') as unknown[],accessories=(Array.isArray(raw)?raw:[]).map((item)=>this.normalizeHomebridgeAccessory(item)).filter((item):item is HomebridgeAccessory=>Boolean(item)),counts:Record<string,number>={};for(const item of accessories)counts[item.type]=(counts[item.type]||0)+1;const emptyCacheHint=Array.isArray(raw)&&raw.length===0?'Homebridge reported zero accessories. This is a known Homebridge Config UI X quirk after a restart — its accessory cache only populates once the Accessories tab has been opened in its own web UI at least once. Open http://<your-homebridge-address>/accessories in a browser, then ask again.':undefined;return{configured:true,connected:true,endpoint:status.endpoint,generatedAt,accessories,counts,error:emptyCacheHint};}catch(reason){return{configured:true,connected:false,endpoint:status.endpoint,generatedAt,accessories:[],counts:{},error:reason instanceof Error?reason.message:String(reason)};}}
+  // browser. Rather than just tell the user to do that by hand, Axiom does
+  // it itself in a hidden window (see warmHomebridgeAccessoryCache below) —
+  // the same real login the user's own browser goes through, invisibly.
+  async homebridgeSnapshot():Promise<HomebridgeSnapshot>{
+    const status=this.statuses().find((item)=>item.id==='homebridge')!,generatedAt=new Date().toISOString();
+    if(!status.configured)return{configured:false,connected:false,endpoint:status.endpoint,generatedAt,accessories:[],counts:{},error:'Homebridge is not configured.'};
+    try{
+      let raw=await this.homebridgeJson('/api/accessories') as unknown[];
+      let warmedUp=false;
+      if(Array.isArray(raw)&&raw.length===0){
+        warmedUp=await this.warmHomebridgeAccessoryCache().catch(()=>false);
+        if(warmedUp)raw=await this.homebridgeJson('/api/accessories') as unknown[];
+      }
+      const accessories=(Array.isArray(raw)?raw:[]).map((item)=>this.normalizeHomebridgeAccessory(item)).filter((item):item is HomebridgeAccessory=>Boolean(item)),counts:Record<string,number>={};
+      for(const item of accessories)counts[item.type]=(counts[item.type]||0)+1;
+      const emptyCacheHint=accessories.length===0?(warmedUp?'Homebridge still reports zero accessories after Axiom automatically opened its Accessories tab to warm its cache. Either this Homebridge instance genuinely has no accessories configured, or something else is wrong — check its own web UI directly.':'Homebridge reported zero accessories, and the automatic attempt to warm its cache (opening its Accessories tab in a hidden window) did not complete — check the Homebridge UI URL, username, and password in Settings, or open its Accessories tab manually once and ask again.'):undefined;
+      return{configured:true,connected:true,endpoint:status.endpoint,generatedAt,accessories,counts,error:emptyCacheHint};
+    }catch(reason){return{configured:true,connected:false,endpoint:status.endpoint,generatedAt,accessories:[],counts:{},error:reason instanceof Error?reason.message:String(reason)};}
+  }
+  // A hidden, hands-off replica of what fixed this for Robbie manually:
+  // log into Homebridge's own web UI (real form fields, sourced directly
+  // from its own login.component.html — #form-username, #form-pass,
+  // #submit-button) and load its Accessories tab once. Uses the same
+  // username/password already saved for the API login above; this opens no
+  // visible window and never surfaces anything to the user directly — only
+  // homebridgeSnapshot()'s retry afterward does. Best-effort: any failure
+  // here is caught by the caller and just falls back to the manual-open
+  // guidance instead of blocking the whole snapshot.
+  private async warmHomebridgeAccessoryCache():Promise<boolean>{
+    const connection=this.homebridgeConnection();
+    const window=windowForHomebridgeWarmup();
+    await window.loadURL(`${connection.endpoint}/login`);
+    await settleHomebridgeWarmup(window);
+    const submitted=await window.webContents.executeJavaScript(`(() => {
+      const username=document.querySelector('#form-username');
+      const password=document.querySelector('#form-pass');
+      const submit=document.querySelector('#submit-button');
+      if(!username||!password||!submit)return false;
+      const setValue=(node,value)=>{
+        const setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+        setter.call(node,value);
+        node.dispatchEvent(new Event('input',{bubbles:true}));
+        node.dispatchEvent(new Event('change',{bubbles:true}));
+      };
+      setValue(username,${JSON.stringify(connection.username)});
+      setValue(password,${JSON.stringify(connection.password)});
+      submit.click();
+      return true;
+    })()`,true) as boolean;
+    if(!submitted)return false;
+    await settleHomebridgeWarmup(window);
+    // The login form's own client-side redirect can land anywhere in the
+    // app depending on version/config — navigating explicitly to
+    // /accessories afterward is what actually matters (that's the real,
+    // confirmed trigger), not wherever login happens to redirect to.
+    await window.loadURL(`${connection.endpoint}/accessories`);
+    await settleHomebridgeWarmup(window);
+    // Config UI X's accessories page fetches its data a tick after the
+    // route itself finishes loading — did-stop-loading fires first.
+    await new Promise((resolve)=>setTimeout(resolve,1200));
+    return true;
+  }
   async homebridgeControl(input:HomebridgeControlRequest):Promise<HomebridgeControlResult>{const raw=await this.homebridgeJson('/api/accessories') as unknown[],accessories=(Array.isArray(raw)?raw:[]).map((item)=>this.normalizeHomebridgeAccessory(item)).filter((item):item is HomebridgeAccessory=>Boolean(item)),target=String(input.target||'').trim().toLowerCase();if(!target)throw new Error('A smart-home target is required.');const candidates=accessories.filter((item)=>item.uniqueId.toLowerCase()===target||item.name.toLowerCase()===target||item.name.toLowerCase().includes(target));const exact=candidates.filter((item)=>item.uniqueId.toLowerCase()===target||item.name.toLowerCase()===target),accessory=(exact.length===1?exact:candidates).length===1?(exact.length===1?exact:candidates)[0]:undefined;if(!accessory)throw new Error(candidates.length?`Smart-home target is ambiguous: ${candidates.slice(0,8).map((item)=>item.name).join(', ')}.`:`No Homebridge accessory matched “${input.target}”. Ask Axiom to list smart devices first.`);const characteristic=input.characteristic||(Object.prototype.hasOwnProperty.call(accessory.values,'On')?'On':Object.keys(accessory.values)[0]);if(!characteristic||!(characteristic in accessory.values))throw new Error(`${accessory.name} has no “${characteristic||''}” characteristic to set.`);const before=accessory.values[characteristic];
     // Config UI X's PUT handler already does a real HAP read-back of the
     // accessory (setCharacteristic, then refreshCharacteristics) before it
